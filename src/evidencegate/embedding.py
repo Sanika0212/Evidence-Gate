@@ -66,7 +66,7 @@ class HashEmbedder:
                 out[row, h % self.dim] += 1.0 if (h >> 63) & 1 else -1.0
         norms = np.linalg.norm(out, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
-        return out / norms
+        return np.asarray(out / norms, dtype=np.float32)
 
 
 class FastEmbedder:
