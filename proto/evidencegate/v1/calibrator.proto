@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package evidencegate.v1;
+
+import "evidencegate/v1/common.proto";
+
+// Owns each tenant's thresholds, reviewer labels and live score history.
+service CalibratorService {
+  rpc GetThresholds(GetThresholdsRequest) returns (GetThresholdsResponse);
+  rpc RecordScores(RecordScoresRequest) returns (RecordScoresResponse);
+  rpc AddLabel(AddLabelRequest) returns (AddLabelResponse);
+  rpc Fit(FitRequest) returns (FitResponse);
+  rpc Drift(DriftRequest) returns (DriftResponse);
+}
+
+message GetThresholdsRequest {
+  string tenant = 1;
+}
+
+message GetThresholdsResponse {
+  Thresholds thresholds = 1;
+  int32 version = 2;
+  int32 n_unsupported = 3;
+  int32 n_supported = 4;
+  // Share of supported calibration claims the threshold flags anyway.
+  double false_alarm_rate = 5;
+  string fitted_at = 6;
+}
+
+// Support scores of live claims, for drift detection.
+message RecordScoresRequest {
+  string tenant = 1;
+  repeated double support = 2;
+}
+
+message RecordScoresResponse {}
+
+// A reviewer's judgement of one claim.
+message AddLabelRequest {
+  string tenant = 1;
+  double support = 2;
+  bool unsupported = 3;
+  // Was the claim flagged when it was served?
+  bool flagged = 4;
+  // "review" for flagged claims, "audit" for the random sample of unflagged ones.
+  string source = 5;
+}
+
+message AddLabelResponse {}
+
+message FitRequest {
+  string tenant = 1;
+  // 0 keeps the tenant's configured target.
+  double target_recall = 2;
+  // Refuse to fit with fewer labelled unsupported claims than this.
+  int32 min_unsupported = 3;
+}
+
+message FitResponse {
+  GetThresholdsResponse result = 1;
+  bool fitted = 2;
+  string reason = 3;
+}
+
+message DriftRequest {
+  string tenant = 1;
+  // Number of most recent live scores to compare with the calibration set.
+  int32 window = 2;
+}
+
+message DriftResponse {
+  double psi = 1;
+  double ks = 2;
+  int32 live_n = 3;
+  // Reviewer-labelled unsupported claims in the window, and how many of them were flagged.
+  int32 labelled_unsupported = 4;
+  int32 labelled_flagged = 5;
+  double recall_estimate = 6;
+  double recall_lower = 7;
+  bool needs_recalibration = 8;
+  string reason = 9;
+}

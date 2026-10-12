@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package evidencegate.v1;
+
+import "evidencegate/v1/common.proto";
+
+// Checks every claim of an answer against passages. Compute-bound; scaled on its own.
+service CheckerService {
+  rpc Audit(AuditRequest) returns (AuditResponse);
+}
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_SUPPORTED = 1;
+  VERDICT_UNSUPPORTED = 2;
+  VERDICT_CONTRADICTED = 3;
+}
+
+message AuditRequest {
+  string answer = 1;
+  repeated Passage passages = 2;
+  string question = 3;
+  // A known-good answer, when the caller has one.
+  string reference = 4;
+  Thresholds thresholds = 5;
+  bool diagnose = 6;
+}
+
+message Evidence {
+  string passage_id = 1;
+  string text = 2;
+  double support = 3;
+  double contradiction = 4;
+}
+
+message Diagnosis {
+  string cause = 1;
+  string reason = 2;
+  string fix = 3;
+  repeated string passage_ids = 4;
+}
+
+message ClaimResult {
+  int32 index = 1;
+  string text = 2;
+  int32 start = 3;
+  int32 end = 4;
+  double support = 5;
+  double contradiction = 6;
+  Verdict verdict = 7;
+  Evidence evidence = 8;
+  Diagnosis diagnosis = 9;
+  double relevance = 10;
+}
+
+message AuditResponse {
+  repeated ClaimResult claims = 1;
+  string checker = 2;
+  double groundedness = 3;
+  // The full audit as JSON, kept for asynchronous replay of flagged claims.
+  string audit_json = 4;
+}

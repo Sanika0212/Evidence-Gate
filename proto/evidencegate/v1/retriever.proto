@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package evidencegate.v1;
+
+import "evidencegate/v1/common.proto";
+
+// Finds evidence in a tenant's corpus when the caller does not send passages.
+service RetrieverService {
+  rpc Retrieve(RetrieveRequest) returns (RetrieveResponse);
+}
+
+enum RetrievalMode {
+  RETRIEVAL_MODE_UNSPECIFIED = 0;
+  RETRIEVAL_MODE_LEXICAL = 1;
+  RETRIEVAL_MODE_DENSE = 2;
+  RETRIEVAL_MODE_HYBRID = 3;
+  RETRIEVAL_MODE_HYBRID_RERANK = 4;
+}
+
+message RetrieveRequest {
+  string tenant = 1;
+  string query = 2;
+  int32 k = 3;
+  // Unspecified uses the service default (hybrid with reranking).
+  RetrievalMode mode = 4;
+}
+
+message RetrieveResponse {
+  repeated Passage passages = 1;
+  RetrievalMode mode = 2;
+}

@@ -1,0 +1,160 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evidencegate"
+version = "0.1.0"
+description = "A trust gateway that checks every claim in a RAG answer against its sources, with a recall guarantee per deployment"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Sanika Najan", email = "sanikanajan@gmail.com" }]
+requires-python = ">=3.11"
+keywords = ["rag", "hallucination", "guardrails", "conformal-prediction", "kubernetes", "grpc"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "groundsight @ git+https://github.com/Sanika0212/Groundsight@8c204dfc47ce06dc0a6c3c070e8a18414903d10f",
+    "numpy>=1.26",
+    "httpx>=0.27",
+    "grpcio>=1.66",
+    "grpcio-health-checking>=1.66",
+    "protobuf>=5.28",
+    "structlog>=24.4",
+    "prometheus-client>=0.21",
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
+]
+
+[project.optional-dependencies]
+# Everything a running service needs, without model weights or torch.
+serve = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "onnxruntime>=1.19",
+    "tokenizers>=0.20",
+    "fastembed>=0.4",
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.3",
+    "redis>=5.1",
+    "boto3>=1.35",
+    "pyjwt[crypto]>=2.9",
+    "presidio-analyzer>=2.2",
+    "presidio-anonymizer>=2.2",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-grpc>=0.48b0",
+    "opentelemetry-instrumentation-redis>=0.48b0",
+    "opentelemetry-instrumentation-psycopg>=0.48b0",
+    "opentelemetry-instrumentation-botocore>=0.48b0",
+]
+# Converting the checkers to ONNX (run once, offline).
+export = ["torch>=2.4", "transformers>=4.45", "optimum[onnxruntime]>=1.23", "sentencepiece>=0.2"]
+eval = ["pandas>=2.2", "pyarrow>=17", "rank-bm25>=0.2"]
+viz = ["matplotlib>=3.9", "pillow>=10.4"]
+
+[project.scripts]
+evidencegate = "evidencegate.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Sanika0212/Evidence-Gate"
+Issues = "https://github.com/Sanika0212/Evidence-Gate/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.112",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "grpcio-tools>=1.66",
+    "mypy-protobuf>=3.6",
+    "types-protobuf>=5.28",
+    "boto3-stubs[sqs,s3]>=1.35",
+    "types-redis>=4.6",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evidencegate"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["src/evidencegate/v1"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PT"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Header", "fastapi.Form"]
+
+[tool.ruff.lint.per-file-ignores]
+# SQL statements read better unwrapped.
+"src/evidencegate/calibration.py" = ["E501"]
+"src/evidencegate/gateway/review.py" = ["E501"]
+"src/evidencegate/triage.py" = ["E501"]
+"src/evidencegate/retrieval.py" = ["E501"]
+"scripts/*.py" = ["E501"]
+"eval/*.py" = ["E501"]
+"tests/*.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+files = ["src/evidencegate"]
+exclude = ["src/evidencegate/v1/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "evidencegate.v1.*",
+    "fastembed.*",
+    "onnxruntime.*",
+    "tokenizers.*",
+    "pgvector.*",
+    "presidio_analyzer.*",
+    "presidio_anonymizer.*",
+    "grpc.*",
+    "opentelemetry.instrumentation.*",
+    "groundsight.*",
+    "grpc_health.*",
+    "pandas.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers -p no:cacheprovider"
+asyncio_mode = "auto"
+markers = [
+    "services: needs Postgres, Redis, MinIO and ElasticMQ (skipped unless EG_TEST_SERVICES=1)",
+    "models: needs exported ONNX models (skipped unless EG_TEST_MODELS=1)",
+]
+
+[tool.coverage.run]
+source = ["evidencegate"]
+branch = true
+omit = ["src/evidencegate/v1/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]

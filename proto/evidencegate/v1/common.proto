@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package evidencegate.v1;
+
+// A passage the answer may rest on: retrieved by the gateway or supplied by the caller.
+message Passage {
+  string id = 1;
+  string text = 2;
+  // The retriever's score, when the passage was retrieved (higher is better).
+  double score = 3;
+  string source = 4;
+}
+
+// Decision rule for one tenant. A claim is unsupported when its support score is below
+// `support`; with a conformal calibration, `target_recall` is the share of unsupported
+// claims the threshold is guaranteed to flag.
+message Thresholds {
+  double support = 1;
+  double contradiction = 2;
+  double contradiction_overlap = 3;
+  bool contradiction_overrides_support = 4;
+  // 0 when the threshold was not set by conformal calibration.
+  double target_recall = 5;
+  string calibration = 6;
+}
