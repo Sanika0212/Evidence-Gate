@@ -1,0 +1,168 @@
+{{- /*
+Gateway, retriever, calibrator and devauth Deployments with their Services and service
+accounts. The checker (canary-capable) and the worker are in their own files.
+*/ -}}
+{{- $root := . -}}
+{{- $grpc := dict "retriever" (dict "port" 50051 "values" .Values.retriever) "calibrator" (dict "port" 50053 "values" .Values.calibrator) -}}
+{{- range $name, $svc := $grpc }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-gate-{{ $name }}
+  labels: {{- include "eg.labels" $root | nindent 4 }}
+  annotations: {{- toYaml (merge (dict) $svc.values.serviceAccountAnnotations $root.Values.serviceAccount.annotations) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidence-gate-{{ $name }}
+  labels: {{- include "eg.labels" $root | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  replicas: {{ $svc.values.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/name: {{ $name }} } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/part-of: evidence-gate }
+      annotations: {{- include "eg.scrape" 9100 | nindent 8 }}
+        checksum/config: {{ include (print $root.Template.BasePath "/config.yaml") $root | sha256sum }}
+    spec:
+      serviceAccountName: evidence-gate-{{ $name }}
+      {{- include "eg.podSecurity" $root | nindent 6 }}
+      {{- if eq $name "retriever" }}
+      {{- include "eg.modelsInit" $root | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "eg.image" $root }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          args: ["serve", "{{ $name }}"]
+          {{- include "eg.env" $root | nindent 10 }}
+          {{- include "eg.containerSecurity" $root | nindent 10 }}
+          ports:
+            - { name: grpc, containerPort: {{ $svc.port }} }
+            - { name: metrics, containerPort: 9100 }
+          readinessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 5 }
+          livenessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 20, initialDelaySeconds: 30 }
+          resources: {{- toYaml $svc.values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        {{- include "eg.modelsVolume" $root | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-{{ $name }}
+  labels: {{- include "eg.labels" $root | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/name: {{ $name }} }
+  ports: [{ name: grpc, port: {{ $svc.port }}, targetPort: grpc, appProtocol: grpc }]
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-gate-gateway
+  labels: {{- include "eg.labels" . | nindent 4 }}
+  annotations: {{- toYaml (merge (dict) .Values.gateway.serviceAccountAnnotations .Values.serviceAccount.annotations) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidence-gate-gateway
+  labels: {{- include "eg.labels" . | nindent 4 }}
+    app.kubernetes.io/name: gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/name: gateway } }
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: evidence-gate }
+      annotations: {{- include "eg.scrape" 8080 | nindent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: evidence-gate-gateway
+      {{- include "eg.podSecurity" . | nindent 6 }}
+      containers:
+        - name: gateway
+          image: {{ include "eg.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "gateway"]
+          {{- include "eg.env" . | nindent 10 }}
+          {{- include "eg.containerSecurity" . | nindent 10 }}
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, initialDelaySeconds: 20 }
+          resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-gateway
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/name: gateway }
+  ports: [{ name: http, port: 80, targetPort: http }]
+{{- if .Values.gateway.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: evidence-gate
+  labels: {{- include "eg.labels" . | nindent 4 }}
+  annotations: {{- toYaml .Values.gateway.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.gateway.ingress.className }}
+  rules:
+    - {{- with .Values.gateway.ingress.host }}
+      host: {{ . }}
+      {{- end }}
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: evidence-gate-gateway, port: { name: http } } } }
+{{- end }}
+{{- if .Values.devauth.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidence-gate-devauth
+  labels: {{- include "eg.labels" . | nindent 4 }}
+    app.kubernetes.io/name: devauth
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: devauth } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: devauth, app.kubernetes.io/part-of: evidence-gate }
+    spec:
+      automountServiceAccountToken: false
+      {{- include "eg.podSecurity" . | nindent 6 }}
+      containers:
+        - name: devauth
+          image: {{ include "eg.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "devauth"]
+          envFrom: [{ configMapRef: { name: evidence-gate-config } }]
+          {{- include "eg.containerSecurity" . | nindent 10 }}
+          ports: [{ name: http, containerPort: 8081 }]
+          readinessProbe: { httpGet: { path: /healthz, port: http } }
+          resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 256Mi } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-devauth
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/name: devauth }
+  ports: [{ name: http, port: 8081, targetPort: http }]
+{{- end }}

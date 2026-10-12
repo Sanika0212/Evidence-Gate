@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evidence-gate-config
+  labels: {{- include "eg.labels" . | nindent 4 }}
+data:
+  EG_RETRIEVER_ADDR: evidence-gate-retriever:50051
+  EG_CHECKER_ADDR: evidence-gate-checker:50052
+  EG_CALIBRATOR_ADDR: evidence-gate-calibrator:50053
+  EG_REDIS_URL: redis://evidence-gate-redis:6379/0
+  EG_CHECKER: {{ .Values.config.checker | quote }}
+  EG_EMBEDDER: {{ .Values.config.embedder | quote }}
+  EG_RERANKER: {{ .Values.config.reranker | quote }}
+  EG_AUDIT_SAMPLE_RATE: {{ .Values.config.auditSampleRate | quote }}
+  EG_DEFAULT_TARGET_RECALL: {{ .Values.config.defaultTargetRecall | quote }}
+  EG_RATE_LIMIT_PER_MINUTE: {{ .Values.config.rateLimitPerMinute | quote }}
+  EG_RATE_LIMIT_BURST: {{ .Values.config.rateLimitBurst | quote }}
+  EG_AUTH_MODE: {{ .Values.config.authMode | quote }}
+  EG_JWKS_URL: {{ .Values.config.jwksUrl | quote }}
+  EG_JWT_ISSUER: {{ .Values.config.jwtIssuer | quote }}
+  EG_JWT_AUDIENCE: {{ .Values.config.jwtAudience | quote }}
+  EG_DEMO: {{ .Values.config.demo | quote }}
+  EG_AWS_REGION: {{ .Values.config.awsRegion | quote }}
+  AWS_DEFAULT_REGION: {{ .Values.config.awsRegion | quote }}
+  EG_S3_ENDPOINT: {{ .Values.config.s3Endpoint | quote }}
+  EG_SQS_ENDPOINT: {{ .Values.config.sqsEndpoint | quote }}
+  EG_AUDIT_BUCKET: {{ .Values.config.auditBucket | quote }}
+  EG_MODELS_BUCKET: {{ .Values.config.modelsBucket | quote }}
+  EG_TRIAGE_QUEUE: {{ .Values.config.triageQueue | quote }}
+  EG_TRIAGE_GENERATOR: {{ .Values.config.triageGenerator | quote }}
+  EG_MODELS_DIR: /models
+  HF_HUB_OFFLINE: "1"
+  HF_HOME: /tmp/hf
+  {{- with .Values.config.otlpEndpoint }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ . | quote }}
+  {{- end }}
+---
+{{- if .Values.secrets.externalSecret.enabled }}
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: evidence-gate-secrets
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: {{ .Values.secrets.externalSecret.secretStore }}, kind: ClusterSecretStore }
+  target: { name: evidence-gate-secrets }
+  data:
+    - secretKey: databaseUrl
+      remoteRef: { key: {{ .Values.secrets.externalSecret.key }}, property: databaseUrl }
+    - secretKey: reviewToken
+      remoteRef: { key: {{ .Values.secrets.externalSecret.key }}, property: reviewToken }
+{{- else if .Values.secrets.create }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: evidence-gate-secrets
+  labels: {{- include "eg.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  databaseUrl: {{ .Values.secrets.databaseUrl | quote }}
+  reviewToken: {{ .Values.secrets.reviewToken | quote }}
+{{- end }}

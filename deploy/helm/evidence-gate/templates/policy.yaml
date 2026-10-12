@@ -1,0 +1,114 @@
+{{- /* Autoscaling, disruption budgets and network policies. */ -}}
+{{- $root := . -}}
+{{- $scaled := dict "gateway" .Values.gateway "retriever" .Values.retriever "checker" .Values.checker -}}
+{{- range $name, $v := $scaled }}
+{{- if $v.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: evidence-gate-{{ $name }}
+  labels: {{- include "eg.labels" $root | nindent 4 }}
+spec:
+  scaleTargetRef:
+    {{- if and (eq $name "checker") $root.Values.rollouts.enabled }}
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    {{- else }}
+    apiVersion: apps/v1
+    kind: Deployment
+    {{- end }}
+    name: evidence-gate-{{ $name }}
+  minReplicas: {{ $v.hpa.min }}
+  maxReplicas: {{ $v.hpa.max }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ $v.hpa.cpu }} } }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 120 }
+{{- end }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: evidence-gate-gateway
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/name: gateway } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: evidence-gate-checker
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/name: checker } }
+{{- if .Values.networkPolicy.enabled }}
+---
+# Deny all ingress by default; open only the paths the design needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evidence-gate-default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evidence-gate-gateway-ingress
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: gateway } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }} } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} } }
+      ports: [{ port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evidence-gate-internal
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [retriever, checker, calibrator] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app.kubernetes.io/name, operator: In, values: [gateway, triage-worker, recalibrate] }
+      ports: [{ port: 50051 }, { port: 50052 }, { port: 50053 }]
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} } }
+      ports: [{ port: 9100 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evidence-gate-devauth
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: devauth } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/part-of: evidence-gate } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }} } }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evidence-gate-deps
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [postgres, redis, s3, sqs] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/part-of: evidence-gate } }
+{{- end }}

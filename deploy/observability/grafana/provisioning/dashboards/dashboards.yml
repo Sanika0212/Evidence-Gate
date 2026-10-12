@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: evidencegate
+    folder: Evidence Gate
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

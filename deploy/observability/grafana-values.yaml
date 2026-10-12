@@ -1,0 +1,23 @@
+# grafana/grafana with the Prometheus data source; the Evidence Gate dashboard is merged
+# in by scripts/render_obs_values.py (kind) or Terraform (EKS).
+adminPassword: evidencegate-local
+resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 256Mi } }
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        url: http://prometheus-server.observability.svc.cluster.local
+        isDefault: true
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: evidencegate
+        folder: Evidence Gate
+        type: file
+        options: { path: /var/lib/grafana/dashboards/evidencegate }
+grafana.ini:
+  auth.anonymous: { enabled: true, org_role: Viewer }

@@ -1,0 +1,17 @@
+# Local cluster: one node, the exported models mounted at /models, ingress on host port 8090.
+# kindnet enforces NetworkPolicy (kind >= 0.24), so the chart's policies are exercised.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: evidence-gate
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraMounts:
+      - hostPath: MODELS_DIR
+        containerPath: /models
+        readOnly: false
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8090
+        protocol: TCP

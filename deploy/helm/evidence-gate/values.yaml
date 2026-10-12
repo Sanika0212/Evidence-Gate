@@ -1,0 +1,112 @@
+# Defaults; see values-kind.yaml (local cluster) and values-aws.yaml (EKS).
+
+image:
+  repository: evidencegate
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Settings shared by every service (rendered into a ConfigMap as EG_* variables).
+config:
+  checker: minicheck+nli
+  embedder: snowflake/snowflake-arctic-embed-xs
+  reranker: Xenova/ms-marco-MiniLM-L-6-v2
+  auditSampleRate: "0.02"
+  defaultTargetRecall: "0.9"
+  rateLimitPerMinute: "120"
+  rateLimitBurst: "30"
+  authMode: jwt
+  jwksUrl: http://evidence-gate-devauth:8081/.well-known/jwks.json
+  jwtIssuer: evidencegate-dev
+  jwtAudience: evidencegate
+  demo: "true"
+  awsRegion: us-east-1
+  s3Endpoint: ""       # empty means real S3
+  sqsEndpoint: ""      # empty means real SQS
+  auditBucket: evidencegate-audit
+  modelsBucket: evidencegate-models
+  triageQueue: evidencegate-triage
+  triageGenerator: none   # e.g. bedrock:<model id>
+  otlpEndpoint: ""        # e.g. http://jaeger-collector.observability:4317
+
+# Secret values; in AWS these come from Secrets Manager through External Secrets.
+secrets:
+  create: true
+  databaseUrl: postgresql://evidencegate:evidencegate@evidence-gate-postgres:5432/evidencegate
+  reviewToken: change-me
+  externalSecret:
+    enabled: false
+    secretStore: aws-secrets-manager
+    key: evidencegate/app
+
+# Where the ONNX models come from: a hostPath (kind) or the models bucket (init container).
+models:
+  source: s3            # s3 | hostPath
+  hostPath: /models
+  prefix: ""            # key prefix inside the models bucket
+  include: "minicheck/ nli/ fastembed/"
+
+serviceAccount:
+  annotations: {}       # e.g. eks.amazonaws.com/role-arn per service (see values-aws.yaml)
+
+gateway:
+  replicas: 2
+  resources: { requests: { cpu: 250m, memory: 768Mi }, limits: { memory: 1536Mi } }
+  hpa: { enabled: true, min: 2, max: 6, cpu: 70 }
+  ingress:
+    enabled: true
+    className: nginx
+    host: ""
+    annotations: {}
+  serviceAccountAnnotations: {}
+
+checker:
+  replicas: 2
+  onnxThreads: "2"
+  faultRate: "0"        # test hook for canary drills only
+  resources: { requests: { cpu: "1", memory: 2Gi }, limits: { memory: 3Gi } }
+  hpa: { enabled: true, min: 2, max: 8, cpu: 65 }
+  serviceAccountAnnotations: {}
+
+retriever:
+  replicas: 1
+  resources: { requests: { cpu: 250m, memory: 768Mi }, limits: { memory: 1536Mi } }
+  hpa: { enabled: true, min: 1, max: 4, cpu: 70 }
+  serviceAccountAnnotations: {}
+
+calibrator:
+  replicas: 1
+  resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+  serviceAccountAnnotations: {}
+
+triageWorker:
+  replicas: 1
+  resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { memory: 1Gi } }
+  keda: { enabled: false, min: 0, max: 5, queueLength: "5" }
+  serviceAccountAnnotations: {}
+
+recalibrate:
+  schedule: "17 * * * *"
+
+devauth:
+  enabled: true
+
+# Argo Rollouts canary for the checker: 10% then 50% then 100%, gated by Prometheus.
+rollouts:
+  enabled: false
+  prometheusAddress: http://prometheus-server.observability.svc.cluster.local
+  steps: [10, 50]
+  pauseSeconds: 60
+  maxErrorRate: "0.02"
+  maxP95Seconds: "2.0"
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  monitoringNamespace: observability
+
+# In-cluster stand-ins for managed services (local clusters, or cost-saving demos).
+deps:
+  postgres: { enabled: true, storage: 5Gi }
+  redis: { enabled: true }
+  s3: { enabled: false }
+  sqs: { enabled: false }

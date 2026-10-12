@@ -1,0 +1,435 @@
+{
+ "title": "Evidence Gate",
+ "uid": "evidencegate",
+ "schemaVersion": 39,
+ "time": {
+  "from": "now-1h",
+  "to": "now"
+ },
+ "refresh": "10s",
+ "tags": [
+  "evidencegate"
+ ],
+ "panels": [
+  {
+   "type": "stat",
+   "title": "Availability (30d SLI)",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "decimals": 3
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "1 - (sum(increase(eg_requests_total{route=\"/v1/check\",status=~\"5..\"}[30d])) / clamp_min(sum(increase(eg_requests_total{route=\"/v1/check\"}[30d])), 1))"
+    }
+   ]
+  },
+  {
+   "type": "stat",
+   "title": "Checks under 1.5 s (30d SLI)",
+   "gridPos": {
+    "x": 6,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "decimals": 3
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(increase(eg_request_duration_seconds_bucket{route=\"/v1/check\",le=\"1.5\"}[30d])) / clamp_min(sum(increase(eg_request_duration_seconds_count{route=\"/v1/check\"}[30d])), 1)"
+    }
+   ]
+  },
+  {
+   "type": "stat",
+   "title": "p95 check latency",
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "eg:check_latency_seconds:p95_5m"
+    }
+   ]
+  },
+  {
+   "type": "stat",
+   "title": "Checks per second",
+   "gridPos": {
+    "x": 18,
+    "y": 0,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps",
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(eg_requests_total{route=\"/v1/check\"}[5m]))"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Check latency",
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(eg_request_duration_seconds_bucket{route=\"/v1/check\"}[5m])))",
+     "legendFormat": "p50"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(eg_request_duration_seconds_bucket{route=\"/v1/check\"}[5m])))",
+     "legendFormat": "p95"
+    },
+    {
+     "refId": "C",
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(eg_request_duration_seconds_bucket{route=\"/v1/check\"}[5m])))",
+     "legendFormat": "p99"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Error-budget burn rate (1h)",
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "eg:check_error_ratio:rate1h / 0.005",
+     "legendFormat": "availability"
+    },
+    {
+     "refId": "B",
+     "expr": "eg:check_slow_ratio:rate1h / 0.05",
+     "legendFormat": "latency"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Decisions",
+   "gridPos": {
+    "x": 0,
+    "y": 12,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (decision) (rate(eg_decisions_total[5m]))",
+     "legendFormat": "{{decision}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Claims by verdict",
+   "gridPos": {
+    "x": 12,
+    "y": 12,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (verdict) (rate(eg_claims_total[5m]))",
+     "legendFormat": "{{verdict}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Stage latency p95",
+   "gridPos": {
+    "x": 0,
+    "y": 20,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(eg_stage_duration_seconds_bucket[5m])))",
+     "legendFormat": "{{stage}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Support threshold per tenant",
+   "gridPos": {
+    "x": 12,
+    "y": 20,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "eg_support_threshold",
+     "legendFormat": "{{tenant}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Drift: PSI of live support scores",
+   "gridPos": {
+    "x": 0,
+    "y": 28,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "eg_drift_psi",
+     "legendFormat": "{{tenant}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Recall lower bound from reviewer labels",
+   "gridPos": {
+    "x": 12,
+    "y": 28,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "eg_recall_lower_bound",
+     "legendFormat": "{{tenant}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Rate-limited requests",
+   "gridPos": {
+    "x": 0,
+    "y": 36,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (tenant) (rate(eg_rate_limited_total[5m]))",
+     "legendFormat": "{{tenant}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Triage jobs",
+   "gridPos": {
+    "x": 12,
+    "y": 36,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (outcome) (rate(eg_triage_processed_total[5m]))",
+     "legendFormat": "{{outcome}}"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "PII entities redacted",
+   "gridPos": {
+    "x": 0,
+    "y": 44,
+    "w": 24,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (entity) (rate(eg_pii_entities_redacted_total[5m]))",
+     "legendFormat": "{{entity}}"
+    }
+   ]
+  }
+ ]
+}

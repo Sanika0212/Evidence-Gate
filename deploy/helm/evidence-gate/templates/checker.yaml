@@ -1,0 +1,115 @@
+{{- /*
+The checker is the compute-heavy service and the one whose model changes most, so it
+ships as an Argo Rollouts canary when rollouts.enabled: 10% then 50% of traffic, each
+step gated by Prometheus analysis of the canary pods' error rate and p95 latency.
+*/ -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-gate-checker
+  labels: {{- include "eg.labels" . | nindent 4 }}
+  annotations: {{- toYaml (merge (dict) .Values.checker.serviceAccountAnnotations .Values.serviceAccount.annotations) | nindent 4 }}
+---
+{{- if .Values.rollouts.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+{{- end }}
+metadata:
+  name: evidence-gate-checker
+  labels: {{- include "eg.labels" . | nindent 4 }}
+    app.kubernetes.io/name: checker
+spec:
+  replicas: {{ .Values.checker.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/name: checker } }
+  {{- if .Values.rollouts.enabled }}
+  strategy:
+    canary:
+      steps:
+        {{- range .Values.rollouts.steps }}
+        - setWeight: {{ . }}
+        - pause: { duration: {{ $.Values.rollouts.pauseSeconds }} }
+        - analysis:
+            templates: [{ templateName: evidence-gate-checker-canary }]
+            args:
+              - name: canary-hash
+                valueFrom: { podTemplateHashValue: Latest }
+        {{- end }}
+  {{- end }}
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: checker, app.kubernetes.io/part-of: evidence-gate }
+      annotations: {{- include "eg.scrape" 9100 | nindent 8 }}
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: evidence-gate-checker
+      {{- include "eg.podSecurity" . | nindent 6 }}
+      {{- include "eg.modelsInit" . | nindent 6 }}
+      containers:
+        - name: checker
+          image: {{ include "eg.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "checker"]
+          {{- include "eg.env" . | nindent 10 }}
+            - { name: EG_ONNX_THREADS, value: {{ .Values.checker.onnxThreads | quote }} }
+            - { name: OMP_NUM_THREADS, value: {{ .Values.checker.onnxThreads | quote }} }
+            - { name: EG_FAULT_RATE, value: {{ .Values.checker.faultRate | quote }} }
+          {{- include "eg.containerSecurity" . | nindent 10 }}
+          ports:
+            - { name: grpc, containerPort: 50052 }
+            - { name: metrics, containerPort: 9100 }
+          startupProbe: { grpc: { port: 50052 }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { grpc: { port: 50052 }, periodSeconds: 5 }
+          livenessProbe: { grpc: { port: 50052 }, periodSeconds: 20 }
+          resources: {{- toYaml .Values.checker.resources | nindent 12 }}
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        {{- include "eg.modelsVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-checker
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  selector: { app.kubernetes.io/name: checker }
+  ports: [{ name: grpc, port: 50052, targetPort: grpc, appProtocol: grpc }]
+{{- if .Values.rollouts.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: evidence-gate-checker-canary
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  args:
+    - name: canary-hash
+  metrics:
+    - name: error-rate
+      interval: 30s
+      count: 3
+      failureLimit: 1
+      successCondition: "isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxErrorRate }}"
+      provider:
+        prometheus:
+          address: {{ .Values.rollouts.prometheusAddress }}
+          query: |
+            sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m]))
+            /
+            clamp_min(sum(rate(eg_stage_duration_seconds_count{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m]))
+              + sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])), 1e-9)
+    - name: p95-latency
+      interval: 30s
+      count: 3
+      failureLimit: 1
+      successCondition: "isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxP95Seconds }}"
+      provider:
+        prometheus:
+          address: {{ .Values.rollouts.prometheusAddress }}
+          query: |
+            histogram_quantile(0.95, sum by (le) (rate(eg_stage_duration_seconds_bucket{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])))
+{{- end }}

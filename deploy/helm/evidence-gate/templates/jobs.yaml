@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evidence-gate-triage
+  labels: {{- include "eg.labels" . | nindent 4 }}
+  annotations: {{- toYaml (merge (dict) .Values.triageWorker.serviceAccountAnnotations .Values.serviceAccount.annotations) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidence-gate-triage-worker
+  labels: {{- include "eg.labels" . | nindent 4 }}
+    app.kubernetes.io/name: triage-worker
+spec:
+  replicas: {{ .Values.triageWorker.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/name: triage-worker } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: triage-worker, app.kubernetes.io/part-of: evidence-gate }
+      annotations: {{- include "eg.scrape" 9100 | nindent 8 }}
+    spec:
+      serviceAccountName: evidence-gate-triage
+      terminationGracePeriodSeconds: 60
+      {{- include "eg.podSecurity" . | nindent 6 }}
+      {{- if ne .Values.config.triageGenerator "none" }}
+      {{- include "eg.modelsInit" . | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "eg.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker", "triage"]
+          {{- include "eg.env" . | nindent 10 }}
+          {{- include "eg.containerSecurity" . | nindent 10 }}
+          ports: [{ name: metrics, containerPort: 9100 }]
+          resources: {{- toYaml .Values.triageWorker.resources | nindent 12 }}
+          volumeMounts:
+            - { name: models, mountPath: /models }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        {{- include "eg.modelsVolume" . | nindent 8 }}
+{{- if .Values.triageWorker.keda.enabled }}
+---
+# Scale the worker on queue depth, down to zero when the queue is empty.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: evidence-gate-triage-worker
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: { name: evidence-gate-triage-worker }
+  minReplicaCount: {{ .Values.triageWorker.keda.min }}
+  maxReplicaCount: {{ .Values.triageWorker.keda.max }}
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef: { name: evidence-gate-keda-aws }
+      metadata:
+        queueURL: {{ .Values.triageWorker.keda.queueUrl | default "" | quote }}
+        queueLength: {{ .Values.triageWorker.keda.queueLength | quote }}
+        awsRegion: {{ .Values.config.awsRegion | quote }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: evidence-gate-keda-aws
+spec:
+  podIdentity: { provider: aws, identityOwner: workload }
+{{- end }}
+---
+# Hourly: compare live scores and reviewer labels with the calibration; refit when asked.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: evidence-gate-recalibrate
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.recalibrate.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: recalibrate, app.kubernetes.io/part-of: evidence-gate }
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          {{- include "eg.podSecurity" . | nindent 10 }}
+          containers:
+            - name: recalibrate
+              image: {{ include "eg.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args: ["recalibrate", "--all"]
+              {{- include "eg.env" . | nindent 14 }}
+              {{- include "eg.containerSecurity" . | nindent 14 }}
+              resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 256Mi } }
+              volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          volumes: [{ name: tmp, emptyDir: {} }]
+---
+# Schema migrations run before every install and upgrade.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: evidence-gate-migrate-{{ .Release.Revision }}
+  labels: {{- include "eg.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: migrate, app.kubernetes.io/part-of: evidence-gate }
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      {{- include "eg.podSecurity" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "eg.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          {{- include "eg.env" . | nindent 10 }}
+          {{- include "eg.containerSecurity" . | nindent 10 }}
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]

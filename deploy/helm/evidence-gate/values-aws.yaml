@@ -1,0 +1,34 @@
+# EKS: images from ECR, models synced from S3, real S3 and SQS through IRSA roles,
+# Cognito as the token issuer, secrets from Secrets Manager, ALB ingress.
+# Terraform writes the account-specific values into values-aws.generated.yaml.
+image: { repository: ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/evidencegate, tag: "0.1.0", pullPolicy: IfNotPresent }
+models: { source: s3, prefix: "" }
+config:
+  authMode: jwt
+  jwksUrl: https://cognito-idp.us-east-1.amazonaws.com/POOL_ID/.well-known/jwks.json
+  jwtIssuer: https://cognito-idp.us-east-1.amazonaws.com/POOL_ID
+  demo: "true"
+  s3Endpoint: ""
+  sqsEndpoint: ""
+  triageGenerator: none
+secrets:
+  create: false
+  externalSecret: { enabled: true, secretStore: aws-secrets-manager, key: evidencegate/app }
+devauth: { enabled: false }
+gateway:
+  ingress:
+    enabled: true
+    className: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+rollouts: { enabled: true }
+triageWorker:
+  keda: { enabled: false }
+networkPolicy: { ingressNamespace: kube-system }
+deps:
+  postgres: { enabled: true, storage: 10Gi }
+  redis: { enabled: true }
+  s3: { enabled: false }
+  sqs: { enabled: false }

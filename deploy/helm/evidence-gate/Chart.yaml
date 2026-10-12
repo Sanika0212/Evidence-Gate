@@ -1,0 +1,8 @@
+apiVersion: v2
+name: evidence-gate
+description: Trust gateway that checks every claim in a RAG answer against its sources
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/Sanika0212/Evidence-Gate
+license: Apache-2.0

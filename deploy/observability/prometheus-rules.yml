@@ -1,0 +1,69 @@
+# SLOs as code for POST /v1/check, with multi-window burn-rate alerts
+# (fast: 1h and 5m windows at 14.4x burn; slow: 6h and 30m at 6x burn).
+#
+#   availability  99.5% of checks do not fail with a 5xx      (error budget 0.5%)
+#   latency       95% of checks complete within 1.5 seconds   (error budget 5%)
+groups:
+  - name: evidencegate-slo-recording
+    interval: 30s
+    rules:
+      - record: eg:check_error_ratio:rate5m
+        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[5m])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[5m])), 1e-9)
+      - record: eg:check_error_ratio:rate30m
+        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[30m])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[30m])), 1e-9)
+      - record: eg:check_error_ratio:rate1h
+        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[1h])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[1h])), 1e-9)
+      - record: eg:check_error_ratio:rate6h
+        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[6h])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[6h])), 1e-9)
+      - record: eg:check_slow_ratio:rate5m
+        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[5m])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[5m])), 1e-9)
+      - record: eg:check_slow_ratio:rate30m
+        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[30m])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[30m])), 1e-9)
+      - record: eg:check_slow_ratio:rate1h
+        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[1h])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[1h])), 1e-9)
+      - record: eg:check_slow_ratio:rate6h
+        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[6h])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[6h])), 1e-9)
+      - record: eg:check_latency_seconds:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(eg_request_duration_seconds_bucket{route="/v1/check"}[5m])))
+
+  - name: evidencegate-slo-alerts
+    rules:
+      - alert: CheckAvailabilityFastBurn
+        expr: eg:check_error_ratio:rate1h > (14.4 * 0.005) and eg:check_error_ratio:rate5m > (14.4 * 0.005)
+        for: 2m
+        labels: { severity: page, slo: availability }
+        annotations:
+          summary: "/v1/check is burning its 30-day availability budget 14x too fast"
+      - alert: CheckAvailabilitySlowBurn
+        expr: eg:check_error_ratio:rate6h > (6 * 0.005) and eg:check_error_ratio:rate30m > (6 * 0.005)
+        for: 15m
+        labels: { severity: ticket, slo: availability }
+        annotations:
+          summary: "/v1/check availability budget is burning 6x too fast"
+      - alert: CheckLatencyFastBurn
+        expr: eg:check_slow_ratio:rate1h > (14.4 * 0.05) and eg:check_slow_ratio:rate5m > (14.4 * 0.05)
+        for: 2m
+        labels: { severity: page, slo: latency }
+        annotations:
+          summary: "Too many checks are slower than 1.5 s"
+      - alert: CheckLatencySlowBurn
+        expr: eg:check_slow_ratio:rate6h > (6 * 0.05) and eg:check_slow_ratio:rate30m > (6 * 0.05)
+        for: 15m
+        labels: { severity: ticket, slo: latency }
+        annotations:
+          summary: "Latency budget for /v1/check is burning 6x too fast"
+
+  - name: evidencegate-model-health
+    rules:
+      - alert: SupportScoresDrifted
+        expr: max by (tenant) (eg_drift_psi) > 0.25
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Live support scores for {{ $labels.tenant }} no longer match calibration (PSI > 0.25)"
+      - alert: TriageErrors
+        expr: sum(rate(eg_triage_processed_total{outcome="error"}[15m])) > 0.05
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Triage worker is failing on queued audits"
