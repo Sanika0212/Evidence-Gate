@@ -1,0 +1,161 @@
+# Local stack: every service plus the AWS stand-ins (SeaweedFS for S3, ElasticMQ for SQS).
+#
+#   docker compose -f deploy/compose/docker-compose.yml up -d
+#   docker compose -f deploy/compose/docker-compose.yml --profile observability up -d
+#
+# Models are mounted from ./models (run scripts/export_models.py first).
+
+x-app: &app
+  image: ${EG_IMAGE:-evidencegate:dev}
+  restart: unless-stopped
+  environment: &env
+    EG_DATABASE_URL: postgresql://evidencegate:evidencegate@postgres:5432/evidencegate
+    EG_REDIS_URL: redis://redis:6379/0
+    EG_S3_ENDPOINT: http://s3:8333
+    EG_SQS_ENDPOINT: http://elasticmq:9324
+    EG_RETRIEVER_ADDR: retriever:50051
+    EG_CHECKER_ADDR: checker:50052
+    EG_CALIBRATOR_ADDR: calibrator:50053
+    EG_JWKS_URL: http://devauth:8081/.well-known/jwks.json
+    EG_MODELS_DIR: /models
+    EG_REVIEW_TOKEN: ${EG_REVIEW_TOKEN:-local-review-token}
+    EG_DEMO: "true"
+    AWS_ACCESS_KEY_ID: evidencegate
+    AWS_SECRET_ACCESS_KEY: evidencegate-secret
+    AWS_DEFAULT_REGION: us-east-1
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  volumes:
+    - ../../models:/models:ro
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: evidencegate
+      POSTGRES_PASSWORD: evidencegate
+      POSTGRES_DB: evidencegate
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evidencegate"]
+      interval: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  s3:
+    # SeaweedFS's S3 gateway stands in for Amazon S3 locally (Object Lock is configured
+    # on the real bucket by Terraform).
+    image: chrislusf/seaweedfs:3.80
+    command: server -dir=/data -s3 -s3.port=8333 -ip.bind=0.0.0.0
+    ports: ["8333:8333"]
+    volumes: [s3data:/data]
+
+  s3-init:
+    image: ${EG_IMAGE:-evidencegate:dev}
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import time, boto3
+        s3 = boto3.client("s3", endpoint_url="http://s3:8333", region_name="us-east-1")
+        for attempt in range(60):
+            try:
+                for b in ("evidencegate-audit", "evidencegate-models"):
+                    if b not in [x["Name"] for x in s3.list_buckets().get("Buckets", [])]:
+                        s3.create_bucket(Bucket=b)
+                break
+            except Exception:
+                time.sleep(2)
+        print("buckets ready")
+    environment:
+      AWS_ACCESS_KEY_ID: evidencegate
+      AWS_SECRET_ACCESS_KEY: evidencegate-secret
+    depends_on: [s3]
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.6.9
+    ports: ["9324:9324"]
+    volumes: [./elasticmq.conf:/opt/elasticmq.conf:ro]
+
+  migrate:
+    image: ${EG_IMAGE:-evidencegate:dev}
+    command: ["migrate"]
+    environment:
+      EG_DATABASE_URL: postgresql://evidencegate:evidencegate@postgres:5432/evidencegate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  devauth:
+    <<: *app
+    command: ["serve", "devauth"]
+    ports: ["8081:8081"]
+    depends_on: []
+
+  retriever:
+    <<: *app
+    command: ["serve", "retriever"]
+
+  checker:
+    <<: *app
+    command: ["serve", "checker"]
+    environment:
+      <<: *env
+      EG_ONNX_THREADS: "2"
+
+  calibrator:
+    <<: *app
+    command: ["serve", "calibrator"]
+
+  gateway:
+    <<: *app
+    command: ["serve", "gateway"]
+    ports: ["8080:8080"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      s3-init:
+        condition: service_completed_successfully
+
+  triage-worker:
+    <<: *app
+    command: ["worker", "triage"]
+    environment:
+      <<: *env
+      EG_TRIAGE_GENERATOR: ${EG_TRIAGE_GENERATOR:-none}
+
+  # ---- observability (profile) ----
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686", "4317:4317"]
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus-rules.yml:/etc/prometheus/rules.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata: {}
+  s3data: {}
