@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install (no model weights needed)
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e ".[serve,eval]" --group dev
+      - name: Lint
+        run: |
+          uv run --no-sync ruff check src tests scripts eval
+          uv run --no-sync ruff format --check src tests scripts eval
+      - name: Type check
+        run: uv run --no-sync mypy
+      - name: Unit and in-process integration tests
+        run: |
+          uv run --no-sync coverage run -m pytest
+          uv run --no-sync coverage report --fail-under=80
+
+  services:
+    name: tests against Postgres (pgvector) and Redis
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: evidencegate
+          POSTGRES_PASSWORD: evidencegate
+          POSTGRES_DB: evidencegate
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U evidencegate" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      EG_TEST_SERVICES: "1"
+      EG_DATABASE_URL: postgresql://evidencegate:evidencegate@localhost:5432/evidencegate
+      EG_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: |
+          uv venv --python 3.12
+          uv pip install -e ".[serve]" --group dev
+      - run: uv run --no-sync pytest -m services -v
+
+  contracts:
+    name: protobuf contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-action@v1
+        with:
+          lint: true
+          format: false
+          breaking: ${{ github.event_name == 'pull_request' }}
+          breaking_against: "${{ github.event.repository.clone_url }}#branch=main"
+          push: false
+      - uses: astral-sh/setup-uv@v6
+      - name: Generated stubs are up to date
+        run: |
+          uv venv --python 3.12
+          uv pip install "grpcio-tools>=1.66" "mypy-protobuf>=3.6"
+          source .venv/bin/activate && scripts/gen_proto.sh
+          git diff --exit-code src/evidencegate/v1
+
+  infra:
+    name: Helm and Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Helm lint and schema validation
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          for values in values-kind.yaml values-aws.yaml; do
+            helm lint deploy/helm/evidence-gate -f deploy/helm/evidence-gate/$values
+            helm template eg deploy/helm/evidence-gate -f deploy/helm/evidence-gate/$values \
+              | ./kubeconform -strict -summary -ignore-missing-schemas \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          done
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt and validate
+        working-directory: deploy/terraform/aws
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+      - uses: terraform-linters/setup-tflint@v4
+      - name: tflint
+        working-directory: deploy/terraform/aws
+        run: tflint --init && tflint
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: deploy/terraform/aws
+          framework: terraform
+          soft_fail: true
+          quiet: true
+
+  image:
+    name: image build, scan and kind smoke test
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t evidencegate:ci .
+      - name: Scan (Trivy, fail on fixable critical CVEs)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: evidencegate:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: evidencegate:ci
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: eg
+      - name: Deploy the chart (model-free settings)
+        run: |
+          kind load docker-image evidencegate:ci --name eg
+          helm install eg deploy/helm/evidence-gate -f deploy/helm/evidence-gate/values-kind.yaml \
+            --set image.tag=ci --set models.hostPath=/tmp \
+            --set config.checker=lexical --set config.embedder=hash --set config.reranker=lexical \
+            --set rollouts.enabled=false --set gateway.ingress.enabled=false \
+            --set gateway.hpa.enabled=false --set checker.hpa.enabled=false \
+            --wait --timeout 10m
+          kubectl get pods -o wide
+      - name: Smoke test through the gateway with an OAuth2 token
+        run: |
+          kubectl port-forward svc/evidence-gate-gateway 8080:80 >/dev/null 2>&1 &
+          kubectl port-forward svc/evidence-gate-devauth 8081:8081 >/dev/null 2>&1 &
+          sleep 5
+          TOKEN=$(curl -s -u demo-client:demo-secret -d grant_type=client_credentials http://localhost:8081/oauth2/token | jq -r .access_token)
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/v1/check -H 'content-type: application/json' -d '{"answer":"x"}')" = 401
+          curl -sf -X POST localhost:8080/v1/check -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+            -d '{"answer":"Aspirin inhibits cyclooxygenase. Aspirin is made from unicorn horns.","passages":[{"id":"p1","text":"Aspirin irreversibly inhibits cyclooxygenase."}]}' \
+            | tee check.json | jq -e '.decision != "pass" and (.claims | length) == 2'
+      - if: failure()
+        run: |
+          kubectl get pods
+          kubectl logs -l app.kubernetes.io/part-of=evidence-gate --tail=50 --all-containers
