@@ -5,7 +5,7 @@
 Sets:
 1. MedHallu, expert-labelled split: 1,000 PubMedQA questions, each with a grounded and a
    hallucinated answer (2,000 answers). An answer's score is its weakest claim's support.
-2. RAGTruth test: 900 answers (300 per task) with human span labels, scored per sentence.
+2. RAGTruth test: 300 answers (100 per task) with human span labels, scored per sentence.
 
 Checkers: the service's ONNX MiniCheck (int8 and fp32), ONNX DeBERTa NLI (int8;
 support = entailment probability), embedding similarity (the common RAG shortcut,
@@ -32,14 +32,25 @@ CHECKERS = {
     ),
     "word-overlap": lambda: load_checker("lexical"),
 }
-SETS = {"medhallu": ("medhallu-labeled", 0), "ragtruth": ("ragtruth-test", 900)}
+# (set, dataset, answers, checkers). The fp32 model only runs on a 600-answer subset:
+# its role is to show int8 loses nothing, measured on the same answers.
+JOBS = [
+    (
+        "medhallu",
+        "medhallu-labeled",
+        0,
+        ["minicheck-int8", "nli-int8", "embedding-similarity", "word-overlap"],
+    ),
+    ("medhallu-600", "medhallu-labeled", 600, ["minicheck-int8", "minicheck-fp32"]),
+    ("ragtruth", "ragtruth-test", 300, ["minicheck-int8", "embedding-similarity", "word-overlap"]),
+]
 
 
 def main() -> None:
     results = []
-    for set_name, (dataset, limit) in SETS.items():
-        for name, factory in CHECKERS.items():
-            checker = factory()
+    for set_name, dataset, limit, names in JOBS:
+        for name in names:
+            checker = CHECKERS[name]()
             started = time.time()
             rows = cached(
                 f"{set_name}-{name}",

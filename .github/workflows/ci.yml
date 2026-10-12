@@ -36,12 +36,10 @@ jobs:
       - name: Type check
         run: uv run --no-sync mypy
       - name: Unit and in-process integration tests
-        run: |
-          uv run --no-sync coverage run -m pytest
-          uv run --no-sync coverage report --fail-under=80
+        run: uv run --no-sync pytest
 
   services:
-    name: tests against Postgres (pgvector) and Redis
+    name: full suite with Postgres (pgvector) and Redis, coverage gate
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -67,8 +65,12 @@ jobs:
           enable-cache: true
       - run: |
           uv venv --python 3.12
-          uv pip install -e ".[serve]" --group dev
-      - run: uv run --no-sync pytest -m services -v
+          uv pip install -e ".[serve,eval]" --group dev
+          uv pip install "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+      - name: Full suite with coverage (all tests, real Postgres and Redis)
+        run: |
+          uv run --no-sync coverage run -m pytest -v
+          uv run --no-sync coverage report --fail-under=85
 
   contracts:
     name: protobuf contracts
