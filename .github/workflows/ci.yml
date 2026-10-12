@@ -31,8 +31,8 @@ jobs:
           uv pip install -e ".[serve,eval]" --group dev
       - name: Lint
         run: |
-          uv run --no-sync ruff check src tests scripts eval
-          uv run --no-sync ruff format --check src tests scripts eval
+          uv run --no-sync ruff check src tests scripts eval loadtest
+          uv run --no-sync ruff format --check src tests scripts eval loadtest
       - name: Type check
         run: uv run --no-sync mypy
       - name: Unit and in-process integration tests
