@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence Gate review queue</title>
+<style>
+  :root { --bg:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --muted:#52514e; --line:#e4e2dc; --ok:#0b7a0b; --warn:#9a6700; --bad:#c22f2f; --accent:#2b59c3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141413; --card:#1e1e1c; --ink:#f2f1ec; --muted:#a8a69e; --line:#34332f; --ok:#5fc25f; --warn:#e0b04a; --bad:#f07070; --accent:#7ea2ff; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:880px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.lead { color:var(--muted); margin:0 0 20px; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:0 0 12px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:8px; }
+  .tag { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:0 8px; margin-right:6px; }
+  .claim { font-weight:600; margin:0 0 8px; }
+  .evidence { border-left:3px solid var(--line); padding-left:10px; color:var(--muted); margin:0 0 12px; }
+  form { display:inline; }
+  button { font:inherit; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); padding:6px 12px; cursor:pointer; }
+  button.yes { border-color:var(--ok); }
+  button.no { border-color:var(--bad); }
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Review queue</h1>
+  <p class="lead">Every flagged claim, plus a random sample of claims that passed. Your labels measure recall and recalibrate the threshold. Text is shown with personal information redacted.</p>
+  {% if not items %}<p class="empty">Nothing to review.</p>{% endif %}
+  {% for item in items %}
+  <div class="item">
+    <div class="meta">
+      <span class="tag">{{ "flagged" if item.flagged else "passed (audit sample)" }}</span>
+      <span class="tag">tenant {{ item.tenant }}</span>
+      <span class="tag">support {{ "%.2f"|format(item.support) }}</span>
+    </div>
+    <p class="claim">{{ item.claim }}</p>
+    {% if item.evidence %}<p class="evidence">Closest evidence: {{ item.evidence }}</p>{% endif %}
+    <form method="post" action="/review/{{ item.id }}">
+      <input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="tenant" value="{{ tenant }}">
+      <button class="yes" name="label" value="supported">&#10003; The evidence supports it</button>
+    </form>
+    <form method="post" action="/review/{{ item.id }}">
+      <input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="tenant" value="{{ tenant }}">
+      <button class="no" name="label" value="unsupported">&#10007; Not supported</button>
+    </form>
+  </div>
+  {% endfor %}
+</main>
+</body>
+</html>

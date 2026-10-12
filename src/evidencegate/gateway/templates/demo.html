@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence Gate demo</title>
+<style>
+  :root { --bg:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --muted:#52514e; --line:#e4e2dc; --ok:#0b7a0b; --warn:#9a6700; --bad:#c22f2f; --accent:#2b59c3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141413; --card:#1e1e1c; --ink:#f2f1ec; --muted:#a8a69e; --line:#34332f; --ok:#5fc25f; --warn:#e0b04a; --bad:#f07070; --accent:#7ea2ff; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:920px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0; }
+  p.lead { color:var(--muted); margin:4px 0 20px; }
+  label { display:block; font-weight:600; margin:12px 0 4px; }
+  textarea { width:100%; font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; }
+  button { margin-top:12px; font:inherit; font-weight:600; border:0; border-radius:10px; padding:10px 18px; background:var(--accent); color:#fff; cursor:pointer; }
+  .decision { font-size:18px; font-weight:700; margin:20px 0 6px; }
+  .guarantee { color:var(--muted); font-size:14px; margin-bottom:12px; }
+  .claim { background:var(--card); border:1px solid var(--line); border-left-width:4px; border-radius:10px; padding:12px; margin:8px 0; }
+  .supported { border-left-color:var(--ok); } .unsupported { border-left-color:var(--warn); } .contradicted { border-left-color:var(--bad); }
+  .badge { font-size:13px; font-weight:700; }
+  .supported .badge { color:var(--ok); } .unsupported .badge { color:var(--warn); } .contradicted .badge { color:var(--bad); }
+  .small { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Evidence Gate</h1>
+  <p class="lead">Paste a question and an AI-generated answer. The gate retrieves evidence from the demo corpus (BioASQ biomedical abstracts), checks every claim, and decides whether the answer should reach a reader.</p>
+  <label for="q">Question</label>
+  <textarea id="q" rows="2">Which enzyme is inhibited by aspirin?</textarea>
+  <label for="a">Answer to check</label>
+  <textarea id="a" rows="5">Aspirin irreversibly inhibits cyclooxygenase by acetylating a serine residue. This blocks thromboxane production in platelets. Aspirin also cures migraine permanently after a single dose.</textarea>
+  <button id="go">Check the answer</button>
+  <div id="out" aria-live="polite"></div>
+  <p class="small">Evidence Gate {{ version }}. Demo only: not medical advice and not a medical device.</p>
+</main>
+<script>
+const icons = { supported: "✓ supported", unsupported: "? unsupported", contradicted: "✗ contradicted" };
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+document.getElementById("go").addEventListener("click", async () => {
+  const out = document.getElementById("out");
+  out.innerHTML = "<p class='small'>Checking…</p>";
+  const res = await fetch("/demo/check", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ question: document.getElementById("q").value, answer: document.getElementById("a").value }) });
+  if (!res.ok) { out.innerHTML = "<p class='small'>Error " + res.status + "</p>"; return; }
+  const r = await res.json();
+  const g = r.guarantee;
+  let html = "<div class='decision'>Decision: " + esc(r.decision.toUpperCase()) + "</div>";
+  html += "<div class='guarantee'>" + (g.target_recall ? ("Threshold " + g.threshold.toFixed(3) + " flags at least " + Math.round(g.target_recall * 100) + "% of unsupported claims (" + esc(g.calibration) + ").") : "Not yet calibrated for this tenant.") + " Checked in " + Math.round(r.latency_ms.total_ms) + " ms.</div>";
+  for (const c of r.claims) {
+    html += "<div class='claim " + c.verdict + "'><div class='badge'>" + icons[c.verdict] + "   support " + c.support.toFixed(2) + "</div><div>" + esc(c.text) + "</div>";
+    if (c.evidence) html += "<div class='small'>Evidence: " + esc(c.evidence.text) + "</div>";
+    if (c.cause) html += "<div class='small'>Likely cause: " + esc(c.cause.replaceAll("_", " ")) + ". " + esc(c.fix) + "</div>";
+    html += "</div>";
+  }
+  out.innerHTML = html;
+});
+</script>
+</body>
+</html>
