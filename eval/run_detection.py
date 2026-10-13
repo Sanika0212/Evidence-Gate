@@ -54,7 +54,7 @@ def main() -> None:
             started = time.time()
             rows = cached(
                 f"{set_name}-{name}",
-                lambda c=checker, d=dataset, n=limit: score_answers(d, c, limit=n),
+                lambda c=checker, d=dataset, n=limit: score_answers(d, c, limit=n, progress=True),
             )
             elapsed = time.time() - started
             auc, lo, hi = bootstrap_auroc(rows)

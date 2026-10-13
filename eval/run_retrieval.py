@@ -4,7 +4,7 @@
 
 Every mode runs against the same Postgres store the retriever service uses (Postgres
 full-text search, pgvector HNSW over arctic-embed-xs, fusion, MiniLM cross-encoder),
-plus an in-memory BM25 over the same 40,221 passages as a reference for the lexical leg.
+plus an in-memory BM25 over the same passages as a reference for the lexical leg.
 Metrics: Recall@5 and @10 (share of a question's gold passages found), nDCG@10, MRR@10,
 and per-query latency.
 """
@@ -72,11 +72,17 @@ def main() -> None:
         load_embedder("snowflake/snowflake-arctic-embed-xs", "models"),
         load_reranker("Xenova/ms-marco-MiniLM-L-6-v2", "models"),
     )
-    questions = datasets.bioasq_questions()
+    bm25 = BM25Reference()
+    # About 12,000 corpus entries are empty in this release; keep gold passages that exist.
+    present = set(bm25.ids)
+    questions = []
+    for q in datasets.bioasq_questions():
+        q.relevant &= present
+        if q.relevant:
+            questions.append(q)
     random.Random(0).shuffle(questions)
     questions = questions[: args.n]
-    bm25 = BM25Reference()
-    systems = {"bm25 (in-memory reference)": None, **{m.value: m for m in Mode}}
+    systems = {"bm25 without stemming (rank-bm25)": None, **{m.value: m for m in Mode}}
     results = []
     for name, mode in systems.items():
         per_q, lat = [], []

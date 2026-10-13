@@ -53,11 +53,18 @@ class EmbeddingChecker:
         return [(float((1 + float(a @ b)) / 2), 0.0) for a, b in zip(premises, claims, strict=True)]
 
 
-def score_labelled_answers(items: Sequence[LabelledAnswer], checker: Any) -> list[Scored]:
+def score_labelled_answers(
+    items: Sequence[LabelledAnswer], checker: Any, *, progress: bool = False
+) -> list[Scored]:
+    import time
+
     from groundsight import audit
 
     out = []
-    for item in items:
+    started = time.time()
+    for n, item in enumerate(items, start=1):
+        if progress and n % 100 == 0:
+            print(f"  {n}/{len(items)} answers, {n / (time.time() - started):.2f}/s", flush=True)
         result = audit(
             item.answer,
             item.passages or [""],
@@ -79,10 +86,12 @@ def score_labelled_answers(items: Sequence[LabelledAnswer], checker: Any) -> lis
     return out
 
 
-def score_ragtruth(split: str, checker: Any, per_task: int | None, seed: int = 0) -> list[Scored]:
+def score_ragtruth(
+    split: str, checker: Any, per_task: int | None, seed: int = 0, *, progress: bool = False
+) -> list[Scored]:
     from groundsight.bench.detect import examples, load_split, score
 
-    rows = score(examples(load_split(split), per_task, seed), checker, progress=False)
+    rows = score(examples(load_split(split), per_task, seed), checker, progress=progress)
     return [Scored(f"{r.example}:{r.start}", r.support, r.label, r.task) for r in rows]
 
 
@@ -95,14 +104,15 @@ def sample_pairs(items: list[LabelledAnswer], limit: int, seed: int) -> list[Lab
     return [x for pair in pairs[: max(1, limit // 2)] for x in pair]
 
 
-def score_answers(dataset: str, checker: Any, *, limit: int = 0, seed: int = 0) -> list[Scored]:
+def score_answers(
+    dataset: str, checker: Any, *, limit: int = 0, seed: int = 0, progress: bool = False
+) -> list[Scored]:
     if dataset.startswith("medhallu-"):
-        return score_labelled_answers(
-            sample_pairs(medhallu(dataset.split("-", 1)[1]), limit, seed), checker
-        )
+        items = sample_pairs(medhallu(dataset.split("-", 1)[1]), limit, seed)
+        return score_labelled_answers(items, checker, progress=progress)
     if dataset.startswith("ragtruth-"):
         per_task = limit // 3 if limit else None
-        return score_ragtruth(dataset.split("-", 1)[1], checker, per_task, seed)
+        return score_ragtruth(dataset.split("-", 1)[1], checker, per_task, seed, progress=progress)
     raise ValueError(f"unknown dataset {dataset!r}")
 
 
