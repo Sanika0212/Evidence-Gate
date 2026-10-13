@@ -103,7 +103,7 @@ def serve(args: argparse.Namespace, settings: Settings) -> None:
         )
     elif args.service == "retriever":
         from evidencegate.embedding import load_embedder, load_reranker
-        from evidencegate.retrieval import PostgresStore, Retriever
+        from evidencegate.retrieval import Mode, PostgresStore, Retriever
 
         store = PostgresStore(_pool(settings), settings.embedding_dim)
         store.migrate()
@@ -117,7 +117,9 @@ def serve(args: argparse.Namespace, settings: Settings) -> None:
             [
                 (
                     retriever_pb2_grpc.add_RetrieverServiceServicer_to_server,
-                    gs.RetrieverServicer(retriever, settings.retrieve_k),
+                    gs.RetrieverServicer(
+                        retriever, settings.retrieve_k, Mode(settings.retrieval_mode)
+                    ),
                 )
             ],
         )
@@ -217,7 +219,18 @@ def ingest(args: argparse.Namespace, settings: Settings) -> None:
         chunk = rows[i : i + args.batch]
         total += store.add(args.tenant, chunk, embedder.embed([t for _, t, _ in chunk]))
         print(f"\r{total}/{len(rows)} passages", end="", flush=True)
+    store.refresh_stats(args.tenant)
     print(f"\ningested {total} passages for {args.tenant} in {time.perf_counter() - started:.0f}s")
+
+
+def reindex(args: argparse.Namespace, settings: Settings) -> None:
+    from evidencegate.retrieval import PostgresStore
+
+    store = PostgresStore(_pool(settings), settings.embedding_dim)
+    store.migrate()
+    started = time.perf_counter()
+    store.reindex(args.tenant)
+    print(f"reindexed {store.count(args.tenant)} passages in {time.perf_counter() - started:.0f}s")
 
 
 def seed(args: argparse.Namespace, settings: Settings) -> None:
@@ -334,6 +347,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--jsonl", help="instead of a dataset: JSON lines with id, text, source")
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--batch", type=int, default=256)
+    p = sub.add_parser("reindex", help="rebuild a tenant's BM25 postings and statistics")
+    p.add_argument("--tenant", default="demo")
     p = sub.add_parser("seed", help="seed a tenant's calibration from a public labelled set")
     p.add_argument("--tenant", default="demo")
     p.add_argument("--dataset", default="medhallu-artificial")
@@ -365,6 +380,7 @@ def main(argv: list[str] | None = None) -> None:
         "worker": worker,
         "migrate": migrate,
         "ingest": ingest,
+        "reindex": reindex,
         "seed": seed,
         "recalibrate": recalibrate,
         "drift": drift,

@@ -44,8 +44,16 @@ def test_postgres_retrieval_modes(pool: Any) -> None:
     assert store.add(tenant, rows, emb.embed([t for _, t, _ in rows])) == 3
     assert store.count(tenant) == 3
     r = Retriever(store, emb, None)
+    # Before statistics exist, lexical search falls back to Postgres text ranking.
     for mode in (Mode.LEXICAL, Mode.DENSE, Mode.HYBRID):
         assert r.retrieve(tenant, "which drug treats type 2 diabetes", 1, mode)[0].id == "b"
+    store.refresh_stats(tenant)
+    bm25 = store.lexical(tenant, "metformin therapy for diabetes", 3)
+    assert bm25[0].id == "b"
+    assert bm25[0].score > 0
+    assert store.lexical(tenant, "eiffel", 3)[0].id == "c"
+    store.reindex(tenant)
+    assert store.lexical(tenant, "aspirin platelets", 1)[0].id == "a"
     assert store.lexical(tenant, "!!!", 3) == []
     # Upsert replaces text without duplicating.
     store.add(

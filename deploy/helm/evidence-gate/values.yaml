@@ -10,6 +10,7 @@ config:
   checker: minicheck+nli
   embedder: snowflake/snowflake-arctic-embed-xs
   reranker: Xenova/ms-marco-MiniLM-L-6-v2
+  retrievalMode: hybrid  # hybrid_rerank adds about 0.7 s per retrieval on CPU
   auditSampleRate: "0.02"
   defaultTargetRecall: "0.9"
   rateLimitPerMinute: "120"

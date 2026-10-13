@@ -1,8 +1,8 @@
 """Hybrid retrieval: lexical and dense candidates fused with reciprocal rank fusion,
 then reordered by a cross-encoder.
 
-Two stores implement the same interface: :class:`PostgresStore` (Postgres full-text
-search plus pgvector, used by the service) and :class:`MemoryStore` (tests).
+Two stores implement the same interface: :class:`PostgresStore` (BM25 over stemmed
+postings plus pgvector, used by the service) and :class:`MemoryStore` (tests).
 """
 
 from __future__ import annotations
@@ -187,15 +187,59 @@ CREATE TABLE IF NOT EXISTS retriever.passages (
 CREATE INDEX IF NOT EXISTS passages_tsv ON retriever.passages USING gin (tsv);
 CREATE INDEX IF NOT EXISTS passages_embedding ON retriever.passages
     USING hnsw (embedding vector_cosine_ops);
+-- BM25: Postgres text ranking has no inverse document frequency, so keep postings
+-- (stemmed lexeme, passage, term frequency) and per-tenant statistics.
+CREATE TABLE IF NOT EXISTS retriever.postings (
+    tenant  text NOT NULL,
+    lexeme  text NOT NULL,
+    id      text NOT NULL,
+    tf      integer NOT NULL,
+    PRIMARY KEY (tenant, lexeme, id)
+);
+CREATE INDEX IF NOT EXISTS postings_id ON retriever.postings (tenant, id);
+CREATE TABLE IF NOT EXISTS retriever.doclen (
+    tenant text NOT NULL, id text NOT NULL, len integer NOT NULL, PRIMARY KEY (tenant, id)
+);
+CREATE TABLE IF NOT EXISTS retriever.lexstats (
+    tenant text NOT NULL, lexeme text NOT NULL, idf double precision NOT NULL,
+    PRIMARY KEY (tenant, lexeme)
+);
+CREATE TABLE IF NOT EXISTS retriever.corpusstats (
+    tenant text PRIMARY KEY, n integer NOT NULL, avglen double precision NOT NULL
+);
+"""
+
+BM25_SQL = """
+WITH q AS (SELECT DISTINCT lexeme FROM unnest(to_tsvector('english', %(query)s))),
+     st AS (SELECT avglen FROM retriever.corpusstats WHERE tenant = %(tenant)s),
+     scored AS (
+         SELECT p.id,
+                sum(ls.idf * p.tf * (%(k1)s + 1)
+                    / (p.tf + %(k1)s * (1 - %(b)s + %(b)s * d.len / st.avglen))) AS score
+         FROM q
+         JOIN retriever.postings p ON p.tenant = %(tenant)s AND p.lexeme = q.lexeme
+         JOIN retriever.lexstats ls ON ls.tenant = %(tenant)s AND ls.lexeme = q.lexeme
+         JOIN retriever.doclen d ON d.tenant = %(tenant)s AND d.id = p.id
+         CROSS JOIN st
+         GROUP BY p.id ORDER BY score DESC LIMIT %(n)s)
+SELECT s.id, x.text, x.source, s.score
+FROM scored s JOIN retriever.passages x ON x.tenant = %(tenant)s AND x.id = s.id
+ORDER BY s.score DESC
 """
 
 
 class PostgresStore:
-    """Passages in Postgres: full-text search (``ts_rank_cd``) and pgvector HNSW search."""
+    """Passages in Postgres: BM25 over stemmed postings and pgvector HNSW search.
 
-    def __init__(self, pool: Any, dim: int = 384) -> None:
+    Call :meth:`refresh_stats` after loading passages (``evidencegate ingest`` does);
+    until then lexical search falls back to Postgres full-text ranking.
+    """
+
+    def __init__(self, pool: Any, dim: int = 384, k1: float = 1.2, b: float = 0.75) -> None:
         self.pool = pool
         self.dim = dim
+        self.k1 = k1
+        self.b = b
 
     def migrate(self) -> None:
         with self.pool.connection() as conn:
@@ -208,6 +252,7 @@ class PostgresStore:
     def add(self, tenant: str, rows: Sequence[tuple[str, str, str]], vectors: np.ndarray) -> int:
         from pgvector.psycopg import register_vector
 
+        ids = [pid for pid, _, _ in rows]
         with self.pool.connection() as conn:
             register_vector(conn)
             with conn.cursor() as cur:
@@ -220,7 +265,50 @@ class PostgresStore:
                         for (pid, text, source), vec in zip(rows, vectors, strict=True)
                     ],
                 )
+                self._index(cur, tenant, ids)
         return len(rows)
+
+    def _index(self, cur: Any, tenant: str, ids: list[str] | None) -> None:
+        where = "p.tenant = %s" + (" AND p.id = ANY(%s)" if ids is not None else "")
+        args: tuple[Any, ...] = (tenant, ids) if ids is not None else (tenant,)
+        cur.execute("DELETE FROM retriever.postings p WHERE " + where, args)
+        cur.execute(
+            "INSERT INTO retriever.postings (tenant, lexeme, id, tf) "
+            "SELECT p.tenant, t.lexeme, p.id, coalesce(array_length(t.positions, 1), 1) "
+            "FROM retriever.passages p, unnest(p.tsv) t WHERE " + where,
+            args,
+        )
+
+    def reindex(self, tenant: str) -> None:
+        """Rebuild postings for every passage of a tenant, then its statistics."""
+        with self.pool.connection() as conn, conn.cursor() as cur:
+            self._index(cur, tenant, None)
+        self.refresh_stats(tenant)
+
+    def refresh_stats(self, tenant: str) -> None:
+        """Document lengths, IDF per lexeme and average length, from the postings."""
+        with self.pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM retriever.doclen WHERE tenant = %s", (tenant,))
+            cur.execute(
+                "INSERT INTO retriever.doclen (tenant, id, len) SELECT tenant, id, sum(tf) "
+                "FROM retriever.postings WHERE tenant = %s GROUP BY tenant, id",
+                (tenant,),
+            )
+            cur.execute("DELETE FROM retriever.lexstats WHERE tenant = %s", (tenant,))
+            cur.execute(
+                "INSERT INTO retriever.lexstats (tenant, lexeme, idf) "
+                "SELECT x.tenant, x.lexeme, ln(1 + (c.n - x.df + 0.5) / (x.df + 0.5)) "
+                "FROM (SELECT tenant, lexeme, count(*) AS df FROM retriever.postings "
+                "      WHERE tenant = %s GROUP BY tenant, lexeme) x, "
+                "     (SELECT count(*) AS n FROM retriever.doclen WHERE tenant = %s) c",
+                (tenant, tenant),
+            )
+            cur.execute(
+                "INSERT INTO retriever.corpusstats (tenant, n, avglen) "
+                "SELECT %s, count(*), coalesce(avg(len), 1) FROM retriever.doclen WHERE tenant = %s "
+                "ON CONFLICT (tenant) DO UPDATE SET n = EXCLUDED.n, avglen = EXCLUDED.avglen",
+                (tenant, tenant),
+            )
 
     def count(self, tenant: str) -> int:
         with self.pool.connection() as conn:
@@ -230,17 +318,25 @@ class PostgresStore:
         return int(row[0]) if row else 0
 
     def lexical(self, tenant: str, query: str, n: int) -> list[Hit]:
-        # websearch_to_tsquery ANDs terms; OR them so long questions still match.
-        terms = " | ".join(dict.fromkeys(_WORD.findall(query.lower())))
-        if not terms:
+        if not _WORD.search(query.lower()):
             return []
-        sql = (
-            "SELECT id, text, source, ts_rank_cd(tsv, q) AS score "
-            "FROM retriever.passages, to_tsquery('english', %s) q "
-            "WHERE tenant = %s AND tsv @@ q ORDER BY score DESC LIMIT %s"
-        )
         with self.pool.connection() as conn:
-            rows = conn.execute(sql, (terms, tenant, n)).fetchall()
+            has_stats = conn.execute(
+                "SELECT 1 FROM retriever.corpusstats WHERE tenant = %s", (tenant,)
+            ).fetchone()
+            if has_stats:
+                rows = conn.execute(
+                    BM25_SQL,
+                    {"query": query, "tenant": tenant, "n": n, "k1": self.k1, "b": self.b},
+                ).fetchall()
+            else:
+                terms = " | ".join(dict.fromkeys(_WORD.findall(query.lower())))
+                rows = conn.execute(
+                    "SELECT id, text, source, ts_rank_cd(tsv, q) AS score "
+                    "FROM retriever.passages, to_tsquery('english', %s) q "
+                    "WHERE tenant = %s AND tsv @@ q ORDER BY score DESC LIMIT %s",
+                    (terms, tenant, n),
+                ).fetchall()
         return [Hit(r[0], r[1], float(r[3]), r[2]) for r in rows]
 
     def dense(self, tenant: str, vector: np.ndarray, n: int) -> list[Hit]:

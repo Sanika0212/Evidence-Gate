@@ -21,7 +21,7 @@ message RetrieveRequest {
   string tenant = 1;
   string query = 2;
   int32 k = 3;
-  // Unspecified uses the service default (hybrid with reranking).
+  // Unspecified uses the service default (EG_RETRIEVAL_MODE, hybrid unless set).
   RetrievalMode mode = 4;
 }
 

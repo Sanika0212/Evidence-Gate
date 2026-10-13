@@ -51,6 +51,7 @@ class Settings:
     default_target_recall: float = 0.9
     review_token: str = "change-me"
     retrieve_k: int = 5
+    retrieval_mode: str = "hybrid"  # lexical, dense, hybrid or hybrid_rerank
     redactor: str = "en_core_web_sm"  # a spaCy model for Presidio, or "regex"
     demo: bool = False  # serve the demo page at / (no auth; a fixed demo tenant)
     demo_tenant: str = "demo"

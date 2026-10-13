@@ -53,7 +53,7 @@ class RetrieveRequest(_message.Message):
     query: _builtins.str
     k: _builtins.int
     mode: Global___RetrievalMode.ValueType
-    """Unspecified uses the service default (hybrid with reranking)."""
+    """Unspecified uses the service default (EG_RETRIEVAL_MODE, hybrid unless set)."""
     def __init__(
         self,
         *,

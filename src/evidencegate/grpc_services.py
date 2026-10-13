@@ -150,14 +150,17 @@ class CheckerServicer(checker_pb2_grpc.CheckerServiceServicer):
 
 
 class RetrieverServicer(retriever_pb2_grpc.RetrieverServiceServicer):
-    def __init__(self, retriever: Retriever, default_k: int = 5) -> None:
+    def __init__(
+        self, retriever: Retriever, default_k: int = 5, default_mode: Mode = Mode.HYBRID
+    ) -> None:
         self.retriever = retriever
         self.default_k = default_k
+        self.default_mode = default_mode
 
     def Retrieve(
         self, request: retriever_pb2.RetrieveRequest, context: Any
     ) -> retriever_pb2.RetrieveResponse:
-        mode = MODES.get(request.mode, Mode.HYBRID_RERANK)
+        mode = MODES.get(request.mode, self.default_mode)
         hits = self.retriever.retrieve(
             request.tenant, request.query, request.k or self.default_k, mode
         )
