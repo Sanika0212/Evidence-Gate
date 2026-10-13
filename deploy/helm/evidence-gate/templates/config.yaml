@@ -11,6 +11,7 @@ data:
   EG_CHECKER: {{ .Values.config.checker | quote }}
   EG_EMBEDDER: {{ .Values.config.embedder | quote }}
   EG_RERANKER: {{ .Values.config.reranker | quote }}
+  EG_RETRIEVAL_MODE: {{ .Values.config.retrievalMode | quote }}
   EG_AUDIT_SAMPLE_RATE: {{ .Values.config.auditSampleRate | quote }}
   EG_DEFAULT_TARGET_RECALL: {{ .Values.config.defaultTargetRecall | quote }}
   EG_RATE_LIMIT_PER_MINUTE: {{ .Values.config.rateLimitPerMinute | quote }}
@@ -31,6 +32,12 @@ data:
   EG_MODELS_DIR: /models
   HF_HUB_OFFLINE: "1"
   HF_HOME: /tmp/hf
+  {{- if or .Values.config.s3Endpoint .Values.config.sqsEndpoint }}
+  # The local S3 and SQS stand-ins ignore credentials, but boto3 will not send an unsigned
+  # request. On EKS these stay unset and IRSA provides real, short-lived credentials.
+  AWS_ACCESS_KEY_ID: local-stand-in
+  AWS_SECRET_ACCESS_KEY: local-stand-in
+  {{- end }}
   {{- with .Values.config.otlpEndpoint }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ . | quote }}
   {{- end }}

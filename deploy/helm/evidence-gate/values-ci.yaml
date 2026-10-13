@@ -1,0 +1,20 @@
+# CI smoke test on a 2-CPU runner: model-free settings and tiny requests, layered on
+# values-kind.yaml.
+models: { source: hostPath, hostPath: /tmp }
+config: { checker: lexical, embedder: hash, reranker: lexical }
+rollouts: { enabled: false }
+gateway:
+  ingress: { enabled: false }
+  hpa: { enabled: false }
+  resources: { requests: { cpu: 20m, memory: 256Mi }, limits: { memory: 768Mi } }
+checker:
+  hpa: { enabled: false }
+  resources: { requests: { cpu: 20m, memory: 128Mi }, limits: { memory: 512Mi } }
+retriever:
+  resources: { requests: { cpu: 20m, memory: 128Mi }, limits: { memory: 512Mi } }
+calibrator:
+  resources: { requests: { cpu: 20m, memory: 64Mi }, limits: { memory: 256Mi } }
+triageWorker:
+  resources: { requests: { cpu: 20m, memory: 128Mi }, limits: { memory: 512Mi } }
+deps:
+  postgres: { enabled: true, storage: 1Gi }

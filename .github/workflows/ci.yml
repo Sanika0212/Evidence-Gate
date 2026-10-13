@@ -161,11 +161,7 @@ jobs:
         run: |
           kind load docker-image evidencegate:ci --name eg
           helm install eg deploy/helm/evidence-gate -f deploy/helm/evidence-gate/values-kind.yaml \
-            --set image.tag=ci --set models.hostPath=/tmp \
-            --set config.checker=lexical --set config.embedder=hash --set config.reranker=lexical \
-            --set rollouts.enabled=false --set gateway.ingress.enabled=false \
-            --set gateway.hpa.enabled=false --set checker.hpa.enabled=false \
-            --wait --timeout 10m
+            -f deploy/helm/evidence-gate/values-ci.yaml --set image.tag=ci --wait --timeout 10m
           kubectl get pods -o wide
       - name: Smoke test through the gateway with an OAuth2 token
         run: |
@@ -180,4 +176,5 @@ jobs:
       - if: failure()
         run: |
           kubectl get pods
+          kubectl describe pods | grep -E -A6 '^Events:' | head -80
           kubectl logs -l app.kubernetes.io/part-of=evidence-gate --tail=50 --all-containers
