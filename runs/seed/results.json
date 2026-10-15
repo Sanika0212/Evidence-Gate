@@ -1,0 +1,11 @@
+{
+  "labels": 1259,
+  "fitted": true,
+  "reason": "fitted",
+  "threshold": 0.2018651515245438,
+  "false_alarm_rate": 0.2637795275590551,
+  "tenant": "demo",
+  "dataset": "scifact",
+  "target_recall": 0.9,
+  "checker_support_model": "minicheck int8 (scores from eval/run_detection.py)"
+}

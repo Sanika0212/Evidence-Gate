@@ -89,28 +89,32 @@ metadata:
 spec:
   args:
     - name: canary-hash
+  # Each query returns exactly one value: "or vector(0)" covers a canary with no traffic
+  # yet and a healthy one whose error counter has never been incremented.
   metrics:
     - name: error-rate
       interval: 30s
       count: 3
       failureLimit: 1
-      successCondition: "isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxErrorRate }}"
+      successCondition: "len(result) == 0 || isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxErrorRate }}"
       provider:
         prometheus:
           address: {{ .Values.rollouts.prometheusAddress }}
           query: |
-            sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m]))
+            (sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])) or vector(0))
             /
-            clamp_min(sum(rate(eg_stage_duration_seconds_count{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m]))
-              + sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])), 1e-9)
+            clamp_min(
+              (sum(rate(eg_stage_duration_seconds_count{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])) or vector(0))
+              + (sum(rate(eg_grpc_errors_total{service="checker", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])) or vector(0)),
+              1e-9)
     - name: p95-latency
       interval: 30s
       count: 3
       failureLimit: 1
-      successCondition: "isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxP95Seconds }}"
+      successCondition: "len(result) == 0 || isNaN(result[0]) || result[0] <= {{ .Values.rollouts.maxP95Seconds }}"
       provider:
         prometheus:
           address: {{ .Values.rollouts.prometheusAddress }}
           query: |
-            histogram_quantile(0.95, sum by (le) (rate(eg_stage_duration_seconds_bucket{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m])))
+            histogram_quantile(0.95, sum by (le) (rate(eg_stage_duration_seconds_bucket{stage="checker_audit", rollouts_pod_template_hash="{{ "{{" }}args.canary-hash{{ "}}" }}"}[1m]))) or vector(0)
 {{- end }}
