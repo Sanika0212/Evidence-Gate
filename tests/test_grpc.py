@@ -176,3 +176,34 @@ def test_checker_runs_at_most_its_concurrency_at_once() -> None:
     for t in threads:
         t.join()
     assert peak[0] == 2
+
+
+def test_reads_are_retried_once_on_unavailable() -> None:
+    class Flaky(CheckerServicer):
+        calls = 0
+
+        def Audit(self, request: Any, context: Any) -> Any:
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                context.abort(grpc.StatusCode.UNAVAILABLE, "first call fails")
+            return super().Audit(request, context)
+
+    port = free_port()
+    server = build_server(
+        port,
+        [(checker_pb2_grpc.add_CheckerServiceServicer_to_server, Flaky(load_checker("lexical")))],
+    )
+    server.start()
+    try:
+        stub = checker_pb2_grpc.CheckerServiceStub(channel(f"127.0.0.1:{port}"))
+        resp = stub.Audit(
+            checker_pb2.AuditRequest(
+                answer="Aspirin inhibits cyclooxygenase.",
+                passages=[common_pb2.Passage(id="p1", text="Aspirin inhibits cyclooxygenase.")],
+            ),
+            timeout=10,
+        )
+        assert resp.claims
+        assert Flaky.calls == 2
+    finally:
+        server.stop(None)

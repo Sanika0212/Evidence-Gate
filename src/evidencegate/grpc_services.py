@@ -294,13 +294,35 @@ def build_server(port: int, servicers: list[tuple[Any, Any]], *, workers: int = 
 # connections, not calls: without this, each gateway sends all its traffic to one pod.
 # With a dns:/// address of a headless Service the client sees every pod and
 # round-robins calls over them.
+# Read-only calls are retried once on UNAVAILABLE (with round-robin, usually on another
+# pod), so one failing replica does not fail the request. Calls that write (scores, labels,
+# fits) are not retried. The canary analysis reads the checker's own error counter, so a
+# bad canary is still caught when its errors are retried away from users.
+_RETRY = [
+    {
+        "name": [
+            {"service": "evidencegate.v1.CheckerService", "method": "Audit"},
+            {"service": "evidencegate.v1.RetrieverService", "method": "Retrieve"},
+            {"service": "evidencegate.v1.CalibratorService", "method": "GetThresholds"},
+        ],
+        "retryPolicy": {
+            "maxAttempts": 2,
+            "initialBackoff": "0.05s",
+            "maxBackoff": "0.5s",
+            "backoffMultiplier": 2,
+            "retryableStatusCodes": ["UNAVAILABLE"],
+        },
+    }
+]
+
+
 def channel(addr: str, lb_policy: str = "round_robin") -> grpc.Channel:
     """A plaintext channel; NetworkPolicies keep internal traffic inside the namespace.
 
     Client spans come from ``instrument_clients`` (called once at service start-up).
     ``lb_policy`` is gRPC's: "round_robin" (default) or "pick_first" (one connection).
     """
-    service_config = json.dumps({"loadBalancingConfig": [{lb_policy: {}}]})
+    service_config = json.dumps({"loadBalancingConfig": [{lb_policy: {}}], "methodConfig": _RETRY})
     return grpc.insecure_channel(
         addr,
         options=[

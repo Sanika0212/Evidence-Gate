@@ -225,3 +225,23 @@ def test_backends_are_built_once_under_concurrent_first_requests(
     for t in threads:
         t.join()
     assert len(built) == 1
+
+
+def test_backend_failure_is_a_counted_503(stack: dict[str, Any]) -> None:
+    import grpc
+
+    from evidencegate.telemetry import REQUESTS
+
+    class Unavailable(grpc.RpcError):
+        def code(self) -> grpc.StatusCode:
+            return grpc.StatusCode.UNAVAILABLE
+
+    def fail(request: Any, context: Any) -> Any:
+        raise Unavailable()
+
+    stack["backends"].clients.checker.Audit = fail
+    before = REQUESTS.labels(route="/v1/check", status="503")._value.get()
+    r = client(stack).post("/v1/check", json={"answer": "Aspirin works.", "passages": PASSAGES})
+    assert r.status_code == 503
+    assert r.json()["code"] == "UNAVAILABLE"
+    assert REQUESTS.labels(route="/v1/check", status="503")._value.get() == before + 1

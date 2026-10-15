@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import grpc
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -230,19 +231,33 @@ def create_app(settings: Settings, backends: Backends | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def metrics_mw(request: Request, call_next: Any) -> Any:
-        route = request.scope.get("route")
         started = time.perf_counter()
-        response = await call_next(request)
-        path = getattr(request.scope.get("route"), "path", None) or (
-            route.path if route else "unmatched"
-        )
-        REQUEST_LATENCY.labels(route=path).observe(time.perf_counter() - started)
-        REQUESTS.labels(route=path, status=str(response.status_code)).inc()
-        return response
+        status = "500"  # an exception that escapes every handler is still a failed request
+        try:
+            response = await call_next(request)
+            status = str(response.status_code)
+            return response
+        finally:
+            route = request.scope.get("route")
+            path = getattr(route, "path", None) or "unmatched"
+            REQUEST_LATENCY.labels(route=path).observe(time.perf_counter() - started)
+            REQUESTS.labels(route=path, status=status).inc()
 
     @app.exception_handler(AuthError)
     async def auth_error(_: Request, exc: AuthError) -> JSONResponse:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status)
+
+    @app.exception_handler(grpc.RpcError)
+    async def backend_error(_: Request, exc: grpc.RpcError) -> JSONResponse:
+        # A backend service failed (after the client's own retry): answer 503 so callers
+        # can retry and the availability SLO counts it, instead of an uncounted traceback.
+        code = exc.code().name if hasattr(exc, "code") else "UNKNOWN"
+        log.warning("backend_error", code=code)
+        return JSONResponse(
+            {"detail": "a backend service is unavailable", "code": code},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
 
     def principal(authorization: str | None = Header(default=None)) -> Principal:
         result: Principal = be().verifier.verify(authorization)

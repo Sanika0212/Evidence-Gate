@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -30,10 +31,6 @@ def rollout(ns: str) -> dict[str, object]:
         "aborted": bool(status.get("abort")),
         "message": status.get("message", ""),
         "step": status.get("currentStepIndex"),
-        "canary_weight": status.get("canary", {})
-        .get("weights", {})
-        .get("canary", {})
-        .get("weight"),
     }
 
 
@@ -73,8 +70,18 @@ def main() -> None:
         help="extra Helm values for both upgrades, e.g. checker.hpa.enabled=false",
     )
     args = p.parse_args()
+    summary = Path(tempfile.mkstemp(suffix=".json")[1])
     traffic = subprocess.Popen(
-        ["k6", "run", "--quiet", "-e", "STAGES=4:20m", "loadtest/k6/check.js"],
+        [
+            "k6",
+            "run",
+            "--quiet",
+            "--summary-export",
+            str(summary),
+            "-e",
+            "STAGES=4:20m",
+            "loadtest/k6/check.js",
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -98,8 +105,16 @@ def main() -> None:
             "fault_rate": float(args.fault_rate),
             "outcome": "aborted" if timeline[-1]["aborted"] else str(timeline[-1]["phase"]),
             "seconds_to_outcome": timeline[-1]["t"],
-            "max_canary_weight": max((s["canary_weight"] or 0) for s in timeline),
+            "furthest_step": max((s["step"] or 0) for s in timeline),
             "timeline": timeline,
+        }
+        # What callers saw while the bad canary was live (k6 stops gracefully on SIGTERM).
+        traffic.terminate()
+        traffic.wait(timeout=60)
+        m = json.loads(summary.read_text())["metrics"]
+        result["client"] = {
+            "requests": m["http_reqs"]["count"],
+            "failed_share": round(m["http_req_failed"]["value"], 4),
         }
         out = Path("runs/canary/results.json")
         out.parent.mkdir(parents=True, exist_ok=True)
