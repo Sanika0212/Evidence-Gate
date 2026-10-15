@@ -1,0 +1,52 @@
+{
+  "requests": 1000,
+  "decisions": {
+    "pass": 581,
+    "flag": 419
+  },
+  "redactor": "Presidio (en_core_web_lg) plus regex",
+  "fixes": true,
+  "identifiers_seeded": 9000,
+  "identifiers_leaked": 0,
+  "by_kind": {
+    "address": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "dob": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "email": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "first_name": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "ip": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "last_name": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "mrn": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "phone": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "ssn": {
+      "seeded": 1000,
+      "leaked": 0
+    }
+  },
+  "leaks_by_sink": {},
+  "examples": [],
+  "seconds": 220.6
+}

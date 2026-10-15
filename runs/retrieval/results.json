@@ -1,0 +1,51 @@
+{
+  "questions": 500,
+  "passages": 28001,
+  "results": [
+    {
+      "recall@5": 0.372,
+      "recall@10": 0.483,
+      "ndcg@10": 0.517,
+      "mrr@10": 0.61,
+      "system": "bm25 without stemming (rank-bm25)",
+      "p50_ms": 36.7,
+      "p95_ms": 66.2
+    },
+    {
+      "recall@5": 0.579,
+      "recall@10": 0.725,
+      "ndcg@10": 0.767,
+      "mrr@10": 0.834,
+      "system": "lexical",
+      "p50_ms": 27.3,
+      "p95_ms": 63.9
+    },
+    {
+      "recall@5": 0.444,
+      "recall@10": 0.557,
+      "ndcg@10": 0.612,
+      "mrr@10": 0.729,
+      "system": "dense",
+      "p50_ms": 11.5,
+      "p95_ms": 13.6
+    },
+    {
+      "recall@5": 0.55,
+      "recall@10": 0.709,
+      "ndcg@10": 0.738,
+      "mrr@10": 0.817,
+      "system": "hybrid",
+      "p50_ms": 42.4,
+      "p95_ms": 81.4
+    },
+    {
+      "recall@5": 0.581,
+      "recall@10": 0.726,
+      "ndcg@10": 0.767,
+      "mrr@10": 0.832,
+      "system": "hybrid_rerank",
+      "p50_ms": 726.6,
+      "p95_ms": 1025.2
+    }
+  ]
+}

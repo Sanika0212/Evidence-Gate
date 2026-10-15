@@ -1,0 +1,212 @@
+{
+  "requests": 1000,
+  "decisions": {
+    "pass": 581,
+    "flag": 419
+  },
+  "redactor": "Presidio (en_core_web_sm) plus regex",
+  "fixes": false,
+  "identifiers_seeded": 9000,
+  "identifiers_leaked": 959,
+  "by_kind": {
+    "address": {
+      "seeded": 1000,
+      "leaked": 291
+    },
+    "dob": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "email": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "first_name": {
+      "seeded": 1000,
+      "leaked": 472
+    },
+    "ip": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "last_name": {
+      "seeded": 1000,
+      "leaked": 196
+    },
+    "mrn": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "phone": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "ssn": {
+      "seeded": 1000,
+      "leaked": 0
+    }
+  },
+  "leaks_by_sink": {
+    "audit store": 713,
+    "triage queue": 452,
+    "review store": 712
+  },
+  "examples": [
+    {
+      "kind": "first_name",
+      "value": "Henrietta",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Anselm",
+      "sinks": [
+        "audit store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "5190 Richmond Avenue",
+      "sinks": [
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Annika",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "28 Richmond Drive",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "2344 Parkside Drive",
+      "sinks": [
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "8979 Bailey Lane",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Ifeoma",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Oyelaran",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "3976 Delaware Avenue",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Aaliyah",
+      "sinks": [
+        "review store"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "643 Maple Lane",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Thaddeus",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Cornelius",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Hendricks",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "3460 Elm Street",
+      "sinks": [
+        "audit store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Lucinda",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Hendricks",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "address",
+      "value": "7154 Linwood Street",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Aaliyah",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    }
+  ],
+  "seconds": 147.0
+}

@@ -1,0 +1,100 @@
+{
+  "target_recall": 0.9,
+  "source_answers": 900,
+  "sets": {
+    "scifact": {
+      "transfer": {
+        "source_threshold": 0.2064,
+        "source_false_alarm": 0.413,
+        "recall_on_target": 0.904,
+        "false_alarm_on_target": 0.264,
+        "psi_source_vs_target": 0.191,
+        "n": 1259
+      },
+      "recalibration": [
+        {
+          "labels": 25,
+          "fits": 99,
+          "recall_mean": 0.931,
+          "recall_p10": 0.829,
+          "false_alarm_mean": 0.44
+        },
+        {
+          "labels": 50,
+          "fits": 100,
+          "recall_mean": 0.915,
+          "recall_p10": 0.834,
+          "false_alarm_mean": 0.347
+        },
+        {
+          "labels": 100,
+          "fits": 100,
+          "recall_mean": 0.909,
+          "recall_p10": 0.868,
+          "false_alarm_mean": 0.298
+        },
+        {
+          "labels": 200,
+          "fits": 100,
+          "recall_mean": 0.907,
+          "recall_p10": 0.865,
+          "false_alarm_mean": 0.285
+        },
+        {
+          "labels": 400,
+          "fits": 100,
+          "recall_mean": 0.902,
+          "recall_p10": 0.878,
+          "false_alarm_mean": 0.267
+        }
+      ]
+    },
+    "medhallu": {
+      "transfer": {
+        "source_threshold": 0.2064,
+        "source_false_alarm": 0.413,
+        "recall_on_target": 0.856,
+        "false_alarm_on_target": 0.721,
+        "psi_source_vs_target": 0.183,
+        "n": 2000
+      },
+      "recalibration": [
+        {
+          "labels": 25,
+          "fits": 94,
+          "recall_mean": 0.922,
+          "recall_p10": 0.821,
+          "false_alarm_mean": 0.827
+        },
+        {
+          "labels": 50,
+          "fits": 100,
+          "recall_mean": 0.908,
+          "recall_p10": 0.824,
+          "false_alarm_mean": 0.8
+        },
+        {
+          "labels": 100,
+          "fits": 100,
+          "recall_mean": 0.912,
+          "recall_p10": 0.842,
+          "false_alarm_mean": 0.799
+        },
+        {
+          "labels": 200,
+          "fits": 100,
+          "recall_mean": 0.904,
+          "recall_p10": 0.867,
+          "false_alarm_mean": 0.788
+        },
+        {
+          "labels": 400,
+          "fits": 100,
+          "recall_mean": 0.899,
+          "recall_p10": 0.865,
+          "false_alarm_mean": 0.782
+        }
+      ]
+    }
+  }
+}

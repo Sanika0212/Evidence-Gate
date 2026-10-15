@@ -1,0 +1,216 @@
+{
+  "requests": 1000,
+  "decisions": {
+    "pass": 581,
+    "flag": 419
+  },
+  "redactor": "Presidio (en_core_web_sm) plus regex",
+  "fixes": true,
+  "identifiers_seeded": 9000,
+  "identifiers_leaked": 135,
+  "by_kind": {
+    "address": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "dob": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "email": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "first_name": {
+      "seeded": 1000,
+      "leaked": 45
+    },
+    "ip": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "last_name": {
+      "seeded": 1000,
+      "leaked": 90
+    },
+    "mrn": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "phone": {
+      "seeded": 1000,
+      "leaked": 0
+    },
+    "ssn": {
+      "seeded": 1000,
+      "leaked": 0
+    }
+  },
+  "leaks_by_sink": {
+    "audit store": 130,
+    "review store": 120,
+    "triage queue": 61
+  },
+  "examples": [
+    {
+      "kind": "first_name",
+      "value": "Ifeoma",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Oyelaran",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Hendricks",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Oyelaran",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Hendricks",
+      "sinks": [
+        "audit store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Raghunathan",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Vasquez",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Petrovic",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Annika",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Adeyemi",
+      "sinks": [
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Castellanos",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Lindqvist",
+      "sinks": [
+        "audit store",
+        "review store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Annika",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Raghunathan",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Annika",
+      "sinks": [
+        "audit store",
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Okafor",
+      "sinks": [
+        "triage queue"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Haddad",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "first_name",
+      "value": "Ifeoma",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Nakamura",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    },
+    {
+      "kind": "last_name",
+      "value": "Raghunathan",
+      "sinks": [
+        "audit store",
+        "review store"
+      ]
+    }
+  ],
+  "seconds": 156.9
+}

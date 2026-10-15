@@ -1,0 +1,68 @@
+{
+  "guarantee": {
+    "scifact": [
+      {
+        "target": 0.8,
+        "recall_mean": 0.8,
+        "recall_p5": 0.753,
+        "false_alarm_mean": 0.169,
+        "threshold_mean": 0.082,
+        "share_of_splits_meeting_target": 0.505
+      },
+      {
+        "target": 0.9,
+        "recall_mean": 0.901,
+        "recall_p5": 0.865,
+        "false_alarm_mean": 0.268,
+        "threshold_mean": 0.207,
+        "share_of_splits_meeting_target": 0.5
+      },
+      {
+        "target": 0.95,
+        "recall_mean": 0.951,
+        "recall_p5": 0.926,
+        "false_alarm_mean": 0.41,
+        "threshold_mean": 0.454,
+        "share_of_splits_meeting_target": 0.55
+      }
+    ],
+    "medhallu": [
+      {
+        "target": 0.8,
+        "recall_mean": 0.802,
+        "recall_p5": 0.759,
+        "false_alarm_mean": 0.648,
+        "threshold_mean": 0.147,
+        "share_of_splits_meeting_target": 0.545
+      },
+      {
+        "target": 0.9,
+        "recall_mean": 0.903,
+        "recall_p5": 0.87,
+        "false_alarm_mean": 0.785,
+        "threshold_mean": 0.328,
+        "share_of_splits_meeting_target": 0.6
+      },
+      {
+        "target": 0.95,
+        "recall_mean": 0.948,
+        "recall_p5": 0.924,
+        "false_alarm_mean": 0.854,
+        "threshold_mean": 0.49,
+        "share_of_splits_meeting_target": 0.485
+      }
+    ]
+  },
+  "review_queue": {
+    "threshold": 0.2019,
+    "true_recall": 0.901,
+    "naive_estimate_mean": 0.998,
+    "weighted_estimate_mean": 0.911,
+    "weighted_abs_error_mean": 0.06,
+    "interval_coverage": 0.99,
+    "audit_rate": 0.02,
+    "replays": 200,
+    "set": "scifact",
+    "n": 1259
+  }
+}

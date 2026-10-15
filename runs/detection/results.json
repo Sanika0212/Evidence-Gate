@@ -1,0 +1,134 @@
+[
+  {
+    "set": "scifact",
+    "checker": "minicheck-int8",
+    "items": 1259,
+    "unsupported": 751,
+    "auroc": 0.892,
+    "ci95": [
+      0.873,
+      0.91
+    ],
+    "seconds": 664.1
+  },
+  {
+    "set": "scifact",
+    "checker": "minicheck-fp32",
+    "items": 1259,
+    "unsupported": 751,
+    "auroc": 0.891,
+    "ci95": [
+      0.873,
+      0.91
+    ],
+    "seconds": 441.5
+  },
+  {
+    "set": "scifact",
+    "checker": "nli-int8",
+    "items": 1259,
+    "unsupported": 751,
+    "auroc": 0.748,
+    "ci95": [
+      0.72,
+      0.774
+    ],
+    "seconds": 287.5
+  },
+  {
+    "set": "scifact",
+    "checker": "embedding-similarity",
+    "items": 1259,
+    "unsupported": 751,
+    "auroc": 0.684,
+    "ci95": [
+      0.656,
+      0.713
+    ],
+    "seconds": 19.2
+  },
+  {
+    "set": "scifact",
+    "checker": "word-overlap",
+    "items": 1259,
+    "unsupported": 751,
+    "auroc": 0.69,
+    "ci95": [
+      0.66,
+      0.719
+    ],
+    "seconds": 0.4
+  },
+  {
+    "set": "ragtruth",
+    "checker": "minicheck-int8",
+    "items": 2035,
+    "unsupported": 154,
+    "auroc": 0.825,
+    "ci95": [
+      0.794,
+      0.852
+    ],
+    "seconds": 1562.4
+  },
+  {
+    "set": "ragtruth",
+    "checker": "embedding-similarity",
+    "items": 2035,
+    "unsupported": 154,
+    "auroc": 0.612,
+    "ci95": [
+      0.572,
+      0.65
+    ],
+    "seconds": 21.9
+  },
+  {
+    "set": "ragtruth",
+    "checker": "word-overlap",
+    "items": 2035,
+    "unsupported": 154,
+    "auroc": 0.648,
+    "ci95": [
+      0.605,
+      0.69
+    ],
+    "seconds": 0.9
+  },
+  {
+    "set": "medhallu",
+    "checker": "minicheck-int8",
+    "items": 2000,
+    "unsupported": 1000,
+    "auroc": 0.612,
+    "ci95": [
+      0.589,
+      0.637
+    ],
+    "seconds": 0.0
+  },
+  {
+    "set": "medhallu",
+    "checker": "embedding-similarity",
+    "items": 2000,
+    "unsupported": 1000,
+    "auroc": 0.348,
+    "ci95": [
+      0.324,
+      0.373
+    ],
+    "seconds": 93.3
+  },
+  {
+    "set": "medhallu",
+    "checker": "word-overlap",
+    "items": 2000,
+    "unsupported": 1000,
+    "auroc": 0.451,
+    "ci95": [
+      0.427,
+      0.477
+    ],
+    "seconds": 0.9
+  }
+]
