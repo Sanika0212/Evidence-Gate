@@ -16,6 +16,7 @@ import argparse
 import json
 import signal
 import time
+from pathlib import Path
 from typing import Any
 
 from evidencegate.config import Settings
@@ -241,8 +242,14 @@ def seed(args: argparse.Namespace, settings: Settings) -> None:
 
     store = PostgresCalibrationStore(_pool(settings), settings.default_target_recall)
     store.migrate()
-    checker = load_checker(settings.checker, settings.models_dir)
-    scored = score_answers(args.dataset, checker, limit=args.limit, seed=args.seed)
+    if args.scores:
+        # Scores cached by eval/ with the served checker's support model.
+        from evidencegate.evaluation import Scored
+
+        scored = [Scored(**r) for r in json.loads(Path(args.scores).read_text())]
+    else:
+        checker = load_checker(settings.checker, settings.models_dir)
+        scored = score_answers(args.dataset, checker, limit=args.limit, seed=args.seed)
     labels = [Label(s.support, s.unsupported, False, "seed", 1.0) for s in scored]
     store.add_labels(args.tenant, labels)
     store.set_target_recall(args.tenant, args.target)
@@ -355,6 +362,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--target", type=float, default=0.9)
     p.add_argument("--limit", type=int, default=2000)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--scores", help="seed from cached scores (runs/scores/*.json) instead")
     p = sub.add_parser("recalibrate", help="drift check and refit (the CronJob)")
     p.add_argument("--tenant", action="append")
     p.add_argument("--all", action="store_true")

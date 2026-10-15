@@ -27,7 +27,11 @@ htmlcov/
 # Models, data and run outputs (rebuilt by scripts)
 models/
 data/
-runs/
+# Per-item scores and logs stay local; each run's results.json is committed.
+runs/*/*
+!runs/*/results.json
+runs/scores/
+*.log
 *.log
 
 # OS / editors
