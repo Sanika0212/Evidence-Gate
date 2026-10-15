@@ -6,6 +6,7 @@ its native ``grpc`` probe, and is instrumented with OpenTelemetry.
 
 from __future__ import annotations
 
+import threading
 import time
 from concurrent import futures
 from typing import Any
@@ -69,10 +70,13 @@ def thresholds_to_pb(f: FittedThresholds) -> common_pb2.Thresholds:
 
 
 class CheckerServicer(checker_pb2_grpc.CheckerServiceServicer):
-    def __init__(self, checker: Any, *, fault_rate: float = 0.0) -> None:
+    def __init__(self, checker: Any, *, fault_rate: float = 0.0, concurrency: int = 0) -> None:
         self.checker = checker
         # Test hook for canary drills: fail this share of requests on purpose.
         self.fault_rate = fault_rate
+        # Each inference holds its own activations (about 0.5 GB for a batch of long
+        # passages), so a pod runs at most this many at once and queues the rest.
+        self._slots = threading.BoundedSemaphore(concurrency) if concurrency > 0 else None
 
     def Audit(self, request: checker_pb2.AuditRequest, context: Any) -> checker_pb2.AuditResponse:
         import random
@@ -83,7 +87,12 @@ class CheckerServicer(checker_pb2_grpc.CheckerServiceServicer):
                 context.abort(grpc.StatusCode.UNAVAILABLE, "injected fault (EG_FAULT_RATE)")
             raise RuntimeError("injected fault")
         try:
-            return self._audit(request)
+            if self._slots is None:
+                return self._audit(request)
+            waited = time.perf_counter()
+            with self._slots:
+                STAGE_LATENCY.labels(stage="checker_queue").observe(time.perf_counter() - waited)
+                return self._audit(request)
         except Exception:
             GRPC_ERRORS.labels(service="checker").inc()
             raise

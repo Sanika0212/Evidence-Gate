@@ -56,6 +56,7 @@ spec:
             - { name: EG_ONNX_THREADS, value: {{ .Values.checker.onnxThreads | quote }} }
             - { name: OMP_NUM_THREADS, value: {{ .Values.checker.onnxThreads | quote }} }
             - { name: EG_FAULT_RATE, value: {{ .Values.checker.faultRate | quote }} }
+            - { name: EG_CHECKER_CONCURRENCY, value: {{ .Values.checker.concurrency | quote }} }
           {{- include "eg.containerSecurity" . | nindent 10 }}
           ports:
             - { name: grpc, containerPort: 50052 }

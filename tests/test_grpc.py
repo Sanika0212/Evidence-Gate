@@ -139,3 +139,36 @@ def test_retrieval_modes_over_grpc(servers: dict[str, str]) -> None:
         assert resp.mode == mode
         assert resp.passages[0].id == "p2"
     assert isinstance(resp.passages[0], common_pb2.Passage)
+
+
+def test_checker_runs_at_most_its_concurrency_at_once() -> None:
+    import threading
+    import time
+
+    lexical = load_checker("lexical")
+    active, peak, lock = [0], [0], threading.Lock()
+
+    class Slow:
+        name = "slow"
+        three_way = False
+
+        def score(self, pairs: Any) -> Any:
+            with lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            time.sleep(0.05)
+            with lock:
+                active[0] -= 1
+            return lexical.score(pairs)
+
+    servicer = CheckerServicer(Slow(), concurrency=2)
+    request = checker_pb2.AuditRequest(
+        answer="Aspirin inhibits cyclooxygenase.",
+        passages=[common_pb2.Passage(id="p1", text="Aspirin inhibits cyclooxygenase.")],
+    )
+    threads = [threading.Thread(target=servicer.Audit, args=(request, None)) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert peak[0] == 2

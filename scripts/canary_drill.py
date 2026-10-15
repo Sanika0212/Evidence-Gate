@@ -38,6 +38,8 @@ def rollout(ns: str) -> dict[str, object]:
 
 
 def helm(ns: str, values: str, fault: str, tag: str) -> None:
+    # Helm 4 applies server-side; the chart owns the Rollout fields the controller touches.
+    v4 = sh("helm", "version", "--short").startswith("v4")
     sh(
         "helm",
         "upgrade",
@@ -51,6 +53,7 @@ def helm(ns: str, values: str, fault: str, tag: str) -> None:
         f"checker.faultRate={fault}",
         "--set",
         f"image.tag={tag}",
+        *(["--force-conflicts"] if v4 else []),
     )
 
 

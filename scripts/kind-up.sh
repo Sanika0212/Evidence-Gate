@@ -11,6 +11,11 @@ cd "$(dirname "$0")/.."
 CLUSTER=evidence-gate
 IMAGE=${EG_IMAGE:-evidencegate:dev}
 NS=evidence-gate
+# Helm 4's default "watcher" wait does not understand Argo Rollouts, so use "legacy"
+# (Helm 3 behaviour); and it applies server-side, where the Rollouts controller co-owns
+# the canary steps, so the chart takes those fields back on upgrade.
+HELM_FLAGS=(--wait)
+[[ "$(helm version --short)" == v4* ]] && HELM_FLAGS=(--wait=legacy --force-conflicts)
 
 if ! kind get clusters | grep -qx "$CLUSTER"; then
   sed "s#MODELS_DIR#$(pwd)/models#" deploy/kind/cluster.yaml > /tmp/eg-kind-cluster.yaml
@@ -31,7 +36,7 @@ echo "== ingress-nginx"
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace \
   --version 4.11.3 \
   --set controller.hostPort.enabled=true --set controller.service.type=ClusterIP \
-  --set controller.nodeSelector.ingress-ready=true \
+  --set-string controller.nodeSelector.ingress-ready=true \
   --set-string controller.tolerations[0].key=node-role.kubernetes.io/control-plane \
   --set-string controller.tolerations[0].effect=NoSchedule \
   --set controller.resources.requests.cpu=50m --set controller.resources.requests.memory=90Mi \
@@ -70,7 +75,7 @@ if [[ "${ARGOCD:-0}" == "1" ]]; then
 else
   helm upgrade --install eg deploy/helm/evidence-gate -n "$NS" \
     -f deploy/helm/evidence-gate/values-kind.yaml --set image.tag="${IMAGE#*:}" \
-    --wait --timeout 15m
+    "${HELM_FLAGS[@]}" --timeout 15m
 fi
 kubectl -n "$NS" get pods
 echo

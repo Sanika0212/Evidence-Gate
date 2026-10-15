@@ -5,6 +5,9 @@
 //
 // Each request checks one of a fixed set of medical answers against its passages
 // (the shape a RAG application sends), so the checker does the same work per request.
+// The checker caches scores for (passage, claim) pairs it has seen, so by default every
+// request tags its passages with a unique reference and nothing is served from cache;
+// -e CACHED=1 sends identical requests to measure the cached path instead.
 import http from "k6/http";
 import { check } from "k6";
 import { Trend, Rate } from "k6/metrics";
@@ -63,8 +66,14 @@ export function setup() {
   return { token: res.json("access_token") };
 }
 
+const CACHED = __ENV.CACHED === "1";
+
 export default function (data) {
-  const c = CASES[Math.floor(Math.random() * CASES.length)];
+  const base = CASES[Math.floor(Math.random() * CASES.length)];
+  const ref = `${__VU}-${__ITER}-${Date.now()}`;
+  const c = CACHED
+    ? base
+    : { ...base, passages: base.passages.map((p) => ({ id: p.id, text: `${p.text} (ref ${ref})` })) };
   const res = http.post(`${BASE}/v1/check`, JSON.stringify(c), {
     headers: { "content-type": "application/json", authorization: `Bearer ${data.token}` },
     tags: { endpoint: "check" },

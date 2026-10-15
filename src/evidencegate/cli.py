@@ -96,7 +96,9 @@ def serve(args: argparse.Namespace, settings: Settings) -> None:
                 (
                     checker_pb2_grpc.add_CheckerServiceServicer_to_server,
                     gs.CheckerServicer(
-                        checker, fault_rate=float(os.environ.get("EG_FAULT_RATE", "0") or 0)
+                        checker,
+                        fault_rate=float(os.environ.get("EG_FAULT_RATE", "0") or 0),
+                        concurrency=settings.checker_concurrency,
                     ),
                 )
             ],

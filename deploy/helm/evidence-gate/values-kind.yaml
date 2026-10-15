@@ -6,16 +6,25 @@ config:
   s3Endpoint: http://evidence-gate-s3:8333
   sqsEndpoint: http://evidence-gate-sqs:9324
   otlpEndpoint: ""
+  # High enough that the k6 runs measure capacity, not the limiter (tests cover that).
+  rateLimitPerMinute: "60000"
+  rateLimitBurst: "1000"
 secrets: { reviewToken: local-review-token }
+# Sized for a 4 vCPU, 8 GB VM: requests match measured use (the gateway holds the large
+# spaCy model, about 800 MiB; the checker holds MiniCheck and NLI, about 1.4 GiB), and
+# each autoscaler stops at 2 so the node is never overcommitted. A checker pod is
+# capped at 1.5 CPUs, so a second replica adds real capacity.
 gateway:
   replicas: 1
-  resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { memory: 1Gi } }
-  hpa: { enabled: true, min: 1, max: 3, cpu: 70 }
+  resources: { requests: { cpu: 250m, memory: 800Mi }, limits: { memory: 1280Mi } }
+  hpa: { enabled: true, min: 1, max: 2, cpu: 70 }
   ingress: { enabled: true, className: nginx, host: "" }
 checker:
   replicas: 1
-  resources: { requests: { cpu: 500m, memory: 1536Mi }, limits: { memory: 2560Mi } }
-  hpa: { enabled: true, min: 1, max: 3, cpu: 65 }
+  onnxThreads: "1"
+  concurrency: "2"
+  resources: { requests: { cpu: "1", memory: 1600Mi }, limits: { cpu: 1500m, memory: 2560Mi } }
+  hpa: { enabled: true, min: 1, max: 2, cpu: 65 }
 retriever:
   resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { memory: 1Gi } }
   hpa: { enabled: false, min: 1, max: 2, cpu: 70 }

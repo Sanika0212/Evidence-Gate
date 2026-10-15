@@ -4,7 +4,9 @@
         --base http://localhost:8090 --token-url http://localhost:8081/oauth2/token \
         --where "kind on an Apple M4 laptop (Colima VM, 4 vCPU)"
 
-Writes runs/load/results.json for scripts/make_figures.py.
+Writes runs/<out>/results.json (default runs/load/) for scripts/make_figures.py.
+``--replicas`` only labels the results; pin the checker first, for example with
+``helm upgrade ... --set checker.hpa.enabled=false --set checker.replicas=2``.
 """
 
 from __future__ import annotations
@@ -25,6 +27,9 @@ def main() -> None:
     p.add_argument("--base", default="http://localhost:8090")
     p.add_argument("--token-url", default="http://localhost:8081/oauth2/token")
     p.add_argument("--where", default="")
+    p.add_argument("--replicas", type=int, default=0, help="checker replicas, recorded only")
+    p.add_argument("--cached", action="store_true", help="identical requests (score cache hits)")
+    p.add_argument("--out", default="load")
     args = p.parse_args()
     steps = []
     for vus in args.levels:
@@ -43,6 +48,8 @@ def main() -> None:
                 f"TOKEN_URL={args.token_url}",
                 "-e",
                 f"STAGES={vus}:10s,{vus}:{args.duration}",
+                "-e",
+                f"CACHED={1 if args.cached else 0}",
                 str(SCRIPT),
             ],
             check=False,
@@ -62,10 +69,19 @@ def main() -> None:
             }
         )
         print(steps[-1], flush=True)
-    out = Path("runs/load/results.json")
+    out = Path("runs") / args.out / "results.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
-        json.dumps({"where": args.where, "duration": args.duration, "steps": steps}, indent=2)
+        json.dumps(
+            {
+                "where": args.where,
+                "checker_replicas": args.replicas or None,
+                "cached": args.cached,
+                "duration": args.duration,
+                "steps": steps,
+            },
+            indent=2,
+        )
     )
     print("wrote", out)
 

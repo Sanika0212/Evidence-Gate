@@ -64,6 +64,7 @@ gateway:
 checker:
   replicas: 2
   onnxThreads: "2"
+  concurrency: "2"      # inferences per pod at once; each holds its own activations
   faultRate: "0"        # test hook for canary drills only
   resources: { requests: { cpu: "1", memory: 2Gi }, limits: { memory: 3Gi } }
   hpa: { enabled: true, min: 2, max: 8, cpu: 65 }
