@@ -20,6 +20,25 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "k6" / "check.js"
 
 
+def audits_per_pod(prometheus: str, duration: str) -> dict[str, int]:
+    """Checker audits per pod over the level just run (from the pods' own metrics)."""
+    import urllib.parse
+    import urllib.request
+
+    query = (
+        "sum by (pod) (increase(eg_stage_duration_seconds_count"
+        f'{{stage="checker_audit"}}[{duration}]))'
+    )
+    url = f"{prometheus}/api/v1/query?" + urllib.parse.urlencode({"query": query})
+    with urllib.request.urlopen(url, timeout=10) as r:
+        result = json.load(r)["data"]["result"]
+    return {
+        row["metric"].get("pod", "?"): round(float(row["value"][1]))
+        for row in result
+        if float(row["value"][1]) >= 0.5
+    }
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--levels", type=int, nargs="+", default=[2, 4, 8, 16, 32])
@@ -30,6 +49,11 @@ def main() -> None:
     p.add_argument("--replicas", type=int, default=0, help="checker replicas, recorded only")
     p.add_argument("--cached", action="store_true", help="identical requests (score cache hits)")
     p.add_argument("--out", default="load")
+    p.add_argument(
+        "--prometheus",
+        default="",
+        help="Prometheus URL: also record how many audits each checker pod served per level",
+    )
     args = p.parse_args()
     steps = []
     for vus in args.levels:
@@ -55,6 +79,7 @@ def main() -> None:
             check=False,
         )
         m = json.loads(Path(summary).read_text())["metrics"]
+        per_pod = audits_per_pod(args.prometheus, args.duration) if args.prometheus else None
         dur = m["http_req_duration{endpoint:check}"]
         reqs = m["http_reqs"]
         steps.append(
@@ -66,6 +91,7 @@ def main() -> None:
                 "p99_ms": round(dur["p(99)"], 1),
                 "error_rate": round(m["http_req_failed"]["value"], 4),
                 "requests": reqs["count"],
+                "audits_per_checker_pod": per_pod,
             }
         )
         print(steps[-1], flush=True)
