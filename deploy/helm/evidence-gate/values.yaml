@@ -21,6 +21,7 @@ config:
   jwtAudience: evidencegate
   demo: "true"
   redactor: en_core_web_lg  # spaCy model for PII redaction, or "regex" (no model)
+  grpcLbPolicy: round_robin  # per call over every pod; pick_first pins one connection
   awsRegion: us-east-1
   s3Endpoint: ""       # empty means real S3
   sqsEndpoint: ""      # empty means real SQS
@@ -109,7 +110,12 @@ networkPolicy:
 
 # In-cluster stand-ins for managed services (local clusters, or cost-saving demos).
 deps:
-  postgres: { enabled: true, storage: 5Gi }
+  postgres:
+    enabled: true
+    storage: 5Gi
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 1Gi } }
   redis: { enabled: true }
-  s3: { enabled: false }
+  s3:
+    enabled: false
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
   sqs: { enabled: false }

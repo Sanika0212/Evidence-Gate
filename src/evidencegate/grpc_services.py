@@ -6,6 +6,7 @@ its native ``grpc`` probe, and is instrumented with OpenTelemetry.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from concurrent import futures
@@ -105,8 +106,6 @@ class CheckerServicer(checker_pb2_grpc.CheckerServiceServicer):
             raise
 
     def _audit(self, request: checker_pb2.AuditRequest) -> checker_pb2.AuditResponse:
-        import json
-
         from groundsight import audit as run_audit
 
         started = time.perf_counter()
@@ -274,7 +273,13 @@ def build_server(port: int, servicers: list[tuple[Any, Any]], *, workers: int = 
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=workers),
         interceptors=interceptors,
-        options=[("grpc.max_receive_message_length", 32 * 1024 * 1024)],
+        options=[
+            ("grpc.max_receive_message_length", 32 * 1024 * 1024),
+            # Close each client connection after a while (in-flight calls finish first) so
+            # clients resolve DNS again and spread over replicas added since they connected.
+            ("grpc.max_connection_age_ms", 30_000),
+            ("grpc.max_connection_age_grace_ms", 30_000),
+        ],
     )
     for add, servicer in servicers:
         add(servicer, server)
@@ -285,13 +290,23 @@ def build_server(port: int, servicers: list[tuple[Any, Any]], *, workers: int = 
     return server
 
 
-def channel(addr: str) -> grpc.Channel:
+# One HTTP/2 connection carries every call, and a Kubernetes Service balances
+# connections, not calls: without this, each gateway sends all its traffic to one pod.
+# With a dns:/// address of a headless Service the client sees every pod and
+# round-robins calls over them.
+def channel(addr: str, lb_policy: str = "round_robin") -> grpc.Channel:
     """A plaintext channel; NetworkPolicies keep internal traffic inside the namespace.
 
     Client spans come from ``instrument_clients`` (called once at service start-up).
+    ``lb_policy`` is gRPC's: "round_robin" (default) or "pick_first" (one connection).
     """
+    service_config = json.dumps({"loadBalancingConfig": [{lb_policy: {}}]})
     return grpc.insecure_channel(
-        addr, options=[("grpc.max_receive_message_length", 32 * 1024 * 1024)]
+        addr,
+        options=[
+            ("grpc.max_receive_message_length", 32 * 1024 * 1024),
+            ("grpc.service_config", service_config),
+        ],
     )
 
 

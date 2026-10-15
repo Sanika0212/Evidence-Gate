@@ -60,6 +60,17 @@ metadata:
 spec:
   selector: { app.kubernetes.io/name: {{ $name }} }
   ports: [{ name: grpc, port: {{ $svc.port }}, targetPort: grpc, appProtocol: grpc }]
+---
+# Headless: DNS returns every ready pod, so gRPC clients round-robin calls over them.
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-{{ $name }}-pods
+  labels: {{- include "eg.labels" $root | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: {{ $name }} }
+  ports: [{ name: grpc, port: {{ $svc.port }}, targetPort: grpc, appProtocol: grpc }]
 {{- end }}
 ---
 apiVersion: v1

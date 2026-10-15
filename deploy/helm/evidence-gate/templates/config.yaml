@@ -4,9 +4,10 @@ metadata:
   name: evidence-gate-config
   labels: {{- include "eg.labels" . | nindent 4 }}
 data:
-  EG_RETRIEVER_ADDR: evidence-gate-retriever:50051
-  EG_CHECKER_ADDR: evidence-gate-checker:50052
-  EG_CALIBRATOR_ADDR: evidence-gate-calibrator:50053
+  # dns:/// names of headless Services: clients see every pod and balance per call.
+  EG_RETRIEVER_ADDR: dns:///evidence-gate-retriever-pods:50051
+  EG_CHECKER_ADDR: dns:///evidence-gate-checker-pods:50052
+  EG_CALIBRATOR_ADDR: dns:///evidence-gate-calibrator-pods:50053
   EG_REDIS_URL: redis://evidence-gate-redis:6379/0
   EG_CHECKER: {{ .Values.config.checker | quote }}
   EG_EMBEDDER: {{ .Values.config.embedder | quote }}
@@ -22,6 +23,7 @@ data:
   EG_JWT_AUDIENCE: {{ .Values.config.jwtAudience | quote }}
   EG_DEMO: {{ .Values.config.demo | quote }}
   EG_REDACTOR: {{ .Values.config.redactor | quote }}
+  EG_GRPC_LB_POLICY: {{ .Values.config.grpcLbPolicy | quote }}
   EG_AWS_REGION: {{ .Values.config.awsRegion | quote }}
   AWS_DEFAULT_REGION: {{ .Values.config.awsRegion | quote }}
   EG_S3_ENDPOINT: {{ .Values.config.s3Endpoint | quote }}

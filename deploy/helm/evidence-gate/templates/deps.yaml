@@ -26,7 +26,7 @@ spec:
             - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
           ports: [{ name: pg, containerPort: 5432 }]
           readinessProbe: { exec: { command: ["pg_isready", "-U", "evidencegate"] }, periodSeconds: 5 }
-          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 1Gi } }
+          resources: {{- toYaml .Values.deps.postgres.resources | nindent 12 }}
           volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
   volumeClaimTemplates:
     - metadata: { name: data }
@@ -90,7 +90,7 @@ spec:
           image: chrislusf/seaweedfs:3.80
           args: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-ip.bind=0.0.0.0"]
           ports: [{ name: s3, containerPort: 8333 }]
-          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+          resources: {{- toYaml .Values.deps.s3.resources | nindent 12 }}
           volumeMounts: [{ name: data, mountPath: /data }]
       volumes: [{ name: data, emptyDir: {} }]
 ---

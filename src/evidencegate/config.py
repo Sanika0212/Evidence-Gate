@@ -23,6 +23,7 @@ class Settings:
     calibrator_addr: str = "localhost:50053"
     grpc_timeout_s: float = 30.0
     checker_concurrency: int = 2  # inferences a checker pod runs at once; the rest queue
+    grpc_lb_policy: str = "round_robin"  # or "pick_first" (one connection, one pod)
 
     # Storage.
     database_url: str = "postgresql://evidencegate:evidencegate@localhost:5432/evidencegate"

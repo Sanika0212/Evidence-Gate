@@ -23,19 +23,26 @@ checker:
   replicas: 1
   onnxThreads: "1"
   concurrency: "2"
-  resources: { requests: { cpu: "1", memory: 1600Mi }, limits: { cpu: 1500m, memory: 2560Mi } }
+  resources: { requests: { cpu: 500m, memory: 1600Mi }, limits: { cpu: 1500m, memory: 2560Mi } }
   hpa: { enabled: true, min: 1, max: 2, cpu: 65 }
 retriever:
-  resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { memory: 1Gi } }
+  resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { memory: 1Gi } }
   hpa: { enabled: false, min: 1, max: 2, cpu: 70 }
 triageWorker:
-  resources: { requests: { cpu: 50m, memory: 256Mi }, limits: { memory: 512Mi } }
+  resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+calibrator:
+  resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
 rollouts:
   enabled: true
   prometheusAddress: http://prometheus-server.observability.svc.cluster.local
   pauseSeconds: 45
 deps:
-  postgres: { enabled: true, storage: 2Gi }
+  postgres:
+    enabled: true
+    storage: 2Gi
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 1Gi } }
   redis: { enabled: true }
-  s3: { enabled: true }
+  s3:
+    enabled: true
+    resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { memory: 512Mi } }
   sqs: { enabled: true }

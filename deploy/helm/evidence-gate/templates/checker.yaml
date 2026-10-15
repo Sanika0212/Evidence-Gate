@@ -80,6 +80,18 @@ metadata:
 spec:
   selector: { app.kubernetes.io/name: checker }
   ports: [{ name: grpc, port: 50052, targetPort: grpc, appProtocol: grpc }]
+---
+# Headless: DNS returns every ready checker pod (stable and canary), so gateways
+# round-robin calls over them instead of pinning one connection to one pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: evidence-gate-checker-pods
+  labels: {{- include "eg.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: checker }
+  ports: [{ name: grpc, port: 50052, targetPort: grpc, appProtocol: grpc }]
 {{- if .Values.rollouts.enabled }}
 ---
 apiVersion: argoproj.io/v1alpha1
