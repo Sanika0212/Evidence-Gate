@@ -97,20 +97,34 @@ def test_validation_rejects_empty_answers(stack: dict[str, Any]) -> None:
 
 def test_pii_never_reaches_storage(stack: dict[str, Any]) -> None:
     c = client(stack)
-    c.post(
+    r = c.post(
         "/v1/check",
         json={
             "question": "Patient MRN 12345678, phone 716-555-0142: what does aspirin inhibit?",
-            "answer": "For SSN 123-45-6789 the drug cures migraine forever, email jo@example.com.",
-            "passages": PASSAGES,
+            "answer": "For SSN 123-45-6789 the drug cures migraine forever, email jo@example.com. "
+            "Aspirin inhibits cyclooxygenase, call 716-555-0199.",
+            "passages": [
+                *PASSAGES,
+                {"id": "p3", "text": "Call 716-555-0199 to reach the aspirin clinic."},
+            ],
         },
     )
-    sink = stack["backends"].audit_sink
-    dumped = json.dumps(sink.records) + json.dumps(
-        [vars(i) for i in stack["backends"].reviews.items.values()]
+    assert r.json()["decision"] != "pass"
+    backends = stack["backends"]
+    sink = backends.audit_sink
+    published = backends.publisher.messages
+    assert published, "a flagged answer is queued for triage"
+    dumped = (
+        json.dumps(sink.records)
+        + json.dumps([vars(i) for i in backends.reviews.items.values()])
+        + json.dumps(published)
     )
-    for secret in ("12345678", "716-555-0142", "123-45-6789", "jo@example.com"):
+    for secret in ("12345678", "716-555-0142", "123-45-6789", "jo@example.com", "716-555-0199"):
         assert secret not in dumped
+    # The queued audit stays well formed: claim offsets index the redacted answer.
+    audit = json.loads(published[-1]["audit"])
+    for claim in audit["claims"]:
+        assert audit["answer"][claim["start"] : claim["end"]] == claim["text"]
     record = sink.records[-1]
     assert record["pii_redacted"]["US_SSN"] == 1
     assert len(record["answer_sha256"]) == 64

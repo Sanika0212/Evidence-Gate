@@ -52,7 +52,9 @@ class Settings:
     review_token: str = "change-me"
     retrieve_k: int = 5
     retrieval_mode: str = "hybrid"  # lexical, dense, hybrid or hybrid_rerank
-    redactor: str = "en_core_web_sm"  # a spaCy model for Presidio, or "regex"
+    # A spaCy model for Presidio, or "regex". The large model leaks no identifiers in
+    # eval/run_pii.py where the small one leaks some names (see the README).
+    redactor: str = "en_core_web_lg"
     demo: bool = False  # serve the demo page at / (no auth; a fixed demo tenant)
     demo_tenant: str = "demo"
 

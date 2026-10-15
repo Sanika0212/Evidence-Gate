@@ -26,6 +26,7 @@ from evidencegate._version import __version__
 from evidencegate.config import Settings
 from evidencegate.gateway.audit_log import AuditSink, sha256
 from evidencegate.gateway.auth import AuthError, Principal
+from evidencegate.gateway.pii import redact_audit, scoped
 from evidencegate.gateway.queue import Publisher
 from evidencegate.gateway.review import ReviewItem, ReviewStore
 from evidencegate.telemetry import (
@@ -351,13 +352,14 @@ def create_app(settings: Settings, backends: Backends | None = None) -> FastAPI:
             b.clients.record_scores(tenant, [c["support"] for c in claims])
         except Exception as exc:
             log.error("record_scores_failed", error=type(exc).__name__)
+        redactor = scoped(b.redactor, [req.question or "", req.answer, *(p.text for p in passages)])
         items = []
         for c in claims:
             sampled = c["flagged"] or rng.random() < b.audit_rate
             if not sampled:
                 continue
-            claim_text, _ = b.redactor.redact(c["text"])
-            evidence = (c.get("evidence") or {}).get("text", "")
+            claim_text, _ = redactor.redact(c["text"])
+            evidence, _ = redactor.redact((c.get("evidence") or {}).get("text", ""))
             items.append(
                 ReviewItem(
                     tenant=tenant,
@@ -370,8 +372,8 @@ def create_app(settings: Settings, backends: Backends | None = None) -> FastAPI:
                 )
             )
         b.reviews.add(items)
-        question, q_counts = b.redactor.redact(req.question or "")
-        answer, a_counts = b.redactor.redact(req.answer)
+        question, q_counts = redactor.redact(req.question or "")
+        answer, a_counts = redactor.redact(req.answer)
         b.audit_sink.write(
             {
                 "id": audit_id,
@@ -398,12 +400,14 @@ def create_app(settings: Settings, backends: Backends | None = None) -> FastAPI:
             }
         )
         if decision != "pass":
+            # The triage worker sends this to a language model: redact it first.
+            audit_redacted, _ = redact_audit(result.audit_json, redactor)
             b.publisher.publish(
                 {
                     "audit_id": audit_id,
                     "tenant": tenant,
                     "flagged": [c["index"] for c in claims if c["flagged"]],
-                    "audit": result.audit_json,
+                    "audit": audit_redacted,
                 }
             )
         log.info(

@@ -1,7 +1,7 @@
 # CI smoke test on a 2-CPU runner: model-free settings and tiny requests, layered on
 # values-kind.yaml.
 models: { source: hostPath, hostPath: /tmp }
-config: { checker: lexical, embedder: hash, reranker: lexical }
+config: { checker: lexical, embedder: hash, reranker: lexical, redactor: regex }
 rollouts: { enabled: false }
 gateway:
   ingress: { enabled: false }

@@ -20,6 +20,7 @@ config:
   jwtIssuer: evidencegate-dev
   jwtAudience: evidencegate
   demo: "true"
+  redactor: en_core_web_lg  # spaCy model for PII redaction, or "regex" (no model)
   awsRegion: us-east-1
   s3Endpoint: ""       # empty means real S3
   sqsEndpoint: ""      # empty means real SQS

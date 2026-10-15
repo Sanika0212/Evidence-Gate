@@ -5,6 +5,8 @@
 # object storage by an init container (Kubernetes).
 
 FROM python:3.12-slim AS build
+# The spaCy model behind PII redaction (en_core_web_sm is 13 MB but misses some names).
+ARG SPACY_MODEL=en_core_web_lg
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
@@ -14,7 +16,7 @@ COPY src ./src
 RUN uv venv /opt/venv && \
     VIRTUAL_ENV=/opt/venv uv pip install --no-cache ".[serve]" && \
     VIRTUAL_ENV=/opt/venv uv pip install --no-cache \
-      "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+      "${SPACY_MODEL} @ https://github.com/explosion/spacy-models/releases/download/${SPACY_MODEL}-3.8.0/${SPACY_MODEL}-3.8.0-py3-none-any.whl"
 
 FROM python:3.12-slim
 LABEL org.opencontainers.image.title="evidencegate" \

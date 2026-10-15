@@ -15,7 +15,7 @@ from evidencegate.datasets import LabelledAnswer
 from evidencegate.embedding import HashEmbedder
 from evidencegate.evaluation import EmbeddingChecker, auroc, sample_pairs, score_labelled_answers
 from evidencegate.gateway.audit_log import S3AuditSink, verify_chain
-from evidencegate.gateway.pii import RegexRedactor
+from evidencegate.gateway.pii import RegexRedactor, redact_audit, scoped
 from evidencegate.gateway.queue import SqsPublisher
 from evidencegate.gateway.ratelimit import MemoryRateLimiter
 from evidencegate.onnx_checker import load_checker
@@ -155,6 +155,36 @@ def test_regex_redactor() -> None:
     )
     assert "716" not in text
     assert "<MRN>" in text
+    text, counts = RegexRedactor().redact("Lives at 1612 Hertel Avenue; aged 45 to 75.")
+    assert counts == Counter({"STREET_ADDRESS": 1})
+    assert "Hertel" not in text
+    assert "aged 45 to 75" in text
+
+
+def test_scoped_redactor_carries_names_across_fields() -> None:
+    class FakePresidio(RegexRedactor):
+        def find_names(self, texts: list[str]) -> set[str]:
+            return {"Ngozi", "Okafor"} if any("Ngozi Okafor" in t for t in texts) else set()
+
+    r = scoped(FakePresidio(), ["Patient Ngozi Okafor asked about aspirin.", "Aspirin works."])
+    text, counts = r.redact("Reach Ngozi at 716-555-0101 about aspirin.")
+    assert text == "Reach <PERSON> at <PHONE_NUMBER> about aspirin."
+    assert counts["PERSON"] == 1
+    assert scoped(RegexRedactor(), ["Ngozi Okafor"]).redact("Ngozi")[0] == "Ngozi"
+
+
+def test_redact_audit_falls_back_when_claims_do_not_align() -> None:
+    audit = {
+        "answer": "Call 716-555-0142 now.",
+        "question": "jo@x.org?",
+        "claims": [{"index": 0, "text": "call 716-555-0142", "start": 0, "end": 17}],
+        "chunks": [{"id": "c0", "text": "Phone 716-555-0142."}],
+    }
+    out, counts = redact_audit(json.dumps(audit), RegexRedactor())
+    d = json.loads(out)
+    assert "716" not in out
+    assert counts == Counter({"PHONE_NUMBER": 3, "EMAIL_ADDRESS": 1})
+    assert d["claims"][0]["text"] == "call <PHONE_NUMBER>"
 
 
 def test_presidio_redactor_catches_names() -> None:
@@ -165,7 +195,7 @@ def test_presidio_redactor_catches_names() -> None:
         pytest.skip("spaCy model not installed")
     from evidencegate.gateway.pii import PresidioRedactor
 
-    text, counts = PresidioRedactor().redact(
+    text, counts = PresidioRedactor("en_core_web_sm").redact(
         "John Smith (MRN 12345678) was seen in Buffalo; SSN 123-45-6789."
     )
     assert "John Smith" not in text

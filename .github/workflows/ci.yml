@@ -136,7 +136,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: docker build -t evidencegate:ci .
+        run: docker build --build-arg SPACY_MODEL=en_core_web_sm -t evidencegate:ci .
       - name: Scan (Trivy, fail on fixable critical CVEs)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
