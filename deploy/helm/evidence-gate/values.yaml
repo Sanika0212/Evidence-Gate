@@ -21,7 +21,6 @@ config:
   jwtAudience: evidencegate
   demo: "true"
   redactor: en_core_web_lg  # spaCy model for PII redaction, or "regex" (no model)
-  grpcLbPolicy: round_robin  # per call over every pod; pick_first pins one connection
   awsRegion: us-east-1
   s3Endpoint: ""       # empty means real S3
   sqsEndpoint: ""      # empty means real SQS
@@ -52,6 +51,7 @@ serviceAccount:
   annotations: {}       # e.g. eks.amazonaws.com/role-arn per service (see values-aws.yaml)
 
 gateway:
+  grpcLbPolicy: round_robin  # per call over every pod; pick_first pins one connection
   replicas: 2
   resources: { requests: { cpu: 250m, memory: 768Mi }, limits: { memory: 1536Mi } }
   hpa: { enabled: true, min: 2, max: 6, cpu: 70 }

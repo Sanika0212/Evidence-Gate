@@ -23,7 +23,6 @@ data:
   EG_JWT_AUDIENCE: {{ .Values.config.jwtAudience | quote }}
   EG_DEMO: {{ .Values.config.demo | quote }}
   EG_REDACTOR: {{ .Values.config.redactor | quote }}
-  EG_GRPC_LB_POLICY: {{ .Values.config.grpcLbPolicy | quote }}
   EG_AWS_REGION: {{ .Values.config.awsRegion | quote }}
   AWS_DEFAULT_REGION: {{ .Values.config.awsRegion | quote }}
   EG_S3_ENDPOINT: {{ .Values.config.s3Endpoint | quote }}

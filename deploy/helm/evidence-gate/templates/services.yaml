@@ -104,6 +104,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve", "gateway"]
           {{- include "eg.env" . | nindent 10 }}
+            - { name: EG_GRPC_LB_POLICY, value: {{ .Values.gateway.grpcLbPolicy | quote }} }
           {{- include "eg.containerSecurity" . | nindent 10 }}
           ports: [{ name: http, containerPort: 8080 }]
           readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5, timeoutSeconds: 3 }
