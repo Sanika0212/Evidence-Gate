@@ -1,0 +1,60 @@
+{
+  "where": "kind on an Apple M4 laptop (Colima VM, 4 vCPU, 8 GB); each checker pod capped at 1.5 CPU",
+  "checker_replicas": 2,
+  "cached": false,
+  "duration": "90s",
+  "steps": [
+    {
+      "vus": 1,
+      "rps": 0.36,
+      "p50_ms": 2916.2,
+      "p95_ms": 3743.0,
+      "p99_ms": 4947.5,
+      "error_rate": 0,
+      "requests": 36,
+      "audits_per_checker_pod": {
+        "evidence-gate-checker-8647b9757b-ssf4b": 17,
+        "evidence-gate-checker-8647b9757b-hgqmt": 14
+      }
+    },
+    {
+      "vus": 2,
+      "rps": 0.47,
+      "p50_ms": 4370.3,
+      "p95_ms": 5652.2,
+      "p99_ms": 5771.3,
+      "error_rate": 0,
+      "requests": 48,
+      "audits_per_checker_pod": {
+        "evidence-gate-checker-8647b9757b-ssf4b": 23,
+        "evidence-gate-checker-8647b9757b-hgqmt": 19
+      }
+    },
+    {
+      "vus": 4,
+      "rps": 0.56,
+      "p50_ms": 7011.0,
+      "p95_ms": 10033.3,
+      "p99_ms": 11040.7,
+      "error_rate": 0,
+      "requests": 60,
+      "audits_per_checker_pod": {
+        "evidence-gate-checker-8647b9757b-ssf4b": 26,
+        "evidence-gate-checker-8647b9757b-hgqmt": 24
+      }
+    },
+    {
+      "vus": 8,
+      "rps": 0.58,
+      "p50_ms": 11850.0,
+      "p95_ms": 20963.5,
+      "p99_ms": 21954.0,
+      "error_rate": 0,
+      "requests": 65,
+      "audits_per_checker_pod": {
+        "evidence-gate-checker-8647b9757b-ssf4b": 26,
+        "evidence-gate-checker-8647b9757b-hgqmt": 26
+      }
+    }
+  ]
+}

@@ -8,6 +8,8 @@
 // The checker caches scores for (passage, claim) pairs it has seen, so by default every
 // request tags its passages with a unique reference and nothing is served from cache;
 // -e CACHED=1 sends identical requests to measure the cached path instead.
+// -e SHIFT=1 simulates a retrieval outage: each answer is checked against another case's
+// passages, so support scores collapse and the drift monitor should notice.
 import http from "k6/http";
 import { check } from "k6";
 import { Trend, Rate } from "k6/metrics";
@@ -67,9 +69,11 @@ export function setup() {
 }
 
 const CACHED = __ENV.CACHED === "1";
+const SHIFT = __ENV.SHIFT === "1";
 
 export default function (data) {
-  const base = CASES[Math.floor(Math.random() * CASES.length)];
+  const i = Math.floor(Math.random() * CASES.length);
+  const base = SHIFT ? { ...CASES[i], passages: CASES[(i + 1) % CASES.length].passages } : CASES[i];
   const ref = `${__VU}-${__ITER}-${Date.now()}`;
   const c = CACHED
     ? base
