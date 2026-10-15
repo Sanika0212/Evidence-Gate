@@ -1,0 +1,33 @@
+# GitOps: Argo CD keeps the kind cluster in sync with the chart on main.
+#
+#   ARGOCD=1 scripts/kind-up.sh       (installs Argo CD and applies this instead of helm install)
+#
+# A push to main that changes the chart or its values is rolled out by Argo CD; the
+# Rollouts in the chart then canary the gateway and checker with Prometheus analysis.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: evidence-gate
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Sanika0212/Evidence-Gate.git
+    targetRevision: main
+    path: deploy/helm/evidence-gate
+    helm:
+      releaseName: eg
+      valueFiles:
+        - values-kind.yaml
+      parameters:
+        - name: image.tag
+          value: dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: evidence-gate
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -2,6 +2,7 @@
 # Build a local Kubernetes cluster with everything the chart relies on, then install it.
 #
 #   scripts/kind-up.sh            # cluster + add-ons + Evidence Gate
+#   ARGOCD=1 scripts/kind-up.sh   # same, but Argo CD deploys the chart from git (GitOps)
 #   scripts/kind-down.sh          # delete the cluster
 #
 # Needs: docker, kind, kubectl, helm, and exported models in ./models.
@@ -53,9 +54,24 @@ helm upgrade --install argo-rollouts argo/argo-rollouts -n argo-rollouts --creat
 
 echo "== Evidence Gate"
 kubectl get namespace "$NS" >/dev/null 2>&1 || kubectl create namespace "$NS"
-helm upgrade --install eg deploy/helm/evidence-gate -n "$NS" \
-  -f deploy/helm/evidence-gate/values-kind.yaml --set image.tag="${IMAGE#*:}" \
-  --wait --timeout 15m
+if [[ "${ARGOCD:-0}" == "1" ]]; then
+  echo "== Argo CD (the chart is synced from git)"
+  helm upgrade --install argo-cd argo/argo-cd -n argocd --create-namespace --version 7.6.12 \
+    --set dex.enabled=false --set notifications.enabled=false --set applicationSet.replicas=0 \
+    --set configs.params."server\.insecure"=true --wait
+  kubectl apply -f deploy/argocd/application-kind.yaml
+  for _ in $(seq 1 90); do
+    status=$(kubectl -n argocd get application evidence-gate \
+      -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null || true)
+    echo "  argo cd: ${status:-pending}"
+    [[ "$status" == "Synced/Healthy" ]] && break
+    sleep 10
+  done
+else
+  helm upgrade --install eg deploy/helm/evidence-gate -n "$NS" \
+    -f deploy/helm/evidence-gate/values-kind.yaml --set image.tag="${IMAGE#*:}" \
+    --wait --timeout 15m
+fi
 kubectl -n "$NS" get pods
 echo
 echo "Gateway:  http://localhost:8090/   (demo page)"
