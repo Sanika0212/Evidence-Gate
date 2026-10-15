@@ -34,7 +34,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "1 - (sum(increase(eg_requests_total{route=\"/v1/check\",status=~\"5..\"}[30d])) / clamp_min(sum(increase(eg_requests_total{route=\"/v1/check\"}[30d])), 1))"
+     "expr": "1 - ((sum(increase(eg_requests_total{route=\"/v1/check\",status=~\"5..\"}[30d])) or vector(0)) / clamp_min(sum(increase(eg_requests_total{route=\"/v1/check\"}[30d])), 1))"
     }
    ]
   },
@@ -291,7 +291,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "eg_support_threshold",
+     "expr": "max by (tenant) (eg_support_threshold)",
      "legendFormat": "{{tenant}}"
     }
    ]
@@ -318,7 +318,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "eg_drift_psi",
+     "expr": "max by (tenant) (eg_drift_psi)",
      "legendFormat": "{{tenant}}"
     }
    ]
@@ -338,14 +338,16 @@
    },
    "fieldConfig": {
     "defaults": {
-     "unit": "percentunit"
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1
     },
     "overrides": []
    },
    "targets": [
     {
      "refId": "A",
-     "expr": "eg_recall_lower_bound",
+     "expr": "max by (tenant) (eg_recall_lower_bound)",
      "legendFormat": "{{tenant}}"
     }
    ]

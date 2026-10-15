@@ -3,26 +3,30 @@
 #
 #   availability  99.5% of checks do not fail with a 5xx      (error budget 0.5%)
 #   latency       95% of checks complete within 1.5 seconds   (error budget 5%)
+#
+# Both ratios are 0 with no traffic: "or vector(0)" covers a 5xx series that does not
+# exist yet, and the slow ratio is (all - fast) / all rather than 1 - fast / all, which
+# read 1 (a full burn) whenever the gateway was idle.
 groups:
   - name: evidencegate-slo-recording
     interval: 30s
     rules:
       - record: eg:check_error_ratio:rate5m
-        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[5m])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[5m])), 1e-9)
+        expr: (sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[5m])) or vector(0)) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[5m])), 1e-9)
       - record: eg:check_error_ratio:rate30m
-        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[30m])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[30m])), 1e-9)
+        expr: (sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[30m])) or vector(0)) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[30m])), 1e-9)
       - record: eg:check_error_ratio:rate1h
-        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[1h])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[1h])), 1e-9)
+        expr: (sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[1h])) or vector(0)) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[1h])), 1e-9)
       - record: eg:check_error_ratio:rate6h
-        expr: sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[6h])) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[6h])), 1e-9)
+        expr: (sum(rate(eg_requests_total{route="/v1/check",status=~"5.."}[6h])) or vector(0)) / clamp_min(sum(rate(eg_requests_total{route="/v1/check"}[6h])), 1e-9)
       - record: eg:check_slow_ratio:rate5m
-        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[5m])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[5m])), 1e-9)
+        expr: (sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[5m])) - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[5m]))) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[5m])), 1e-9)
       - record: eg:check_slow_ratio:rate30m
-        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[30m])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[30m])), 1e-9)
+        expr: (sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[30m])) - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[30m]))) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[30m])), 1e-9)
       - record: eg:check_slow_ratio:rate1h
-        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[1h])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[1h])), 1e-9)
+        expr: (sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[1h])) - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[1h]))) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[1h])), 1e-9)
       - record: eg:check_slow_ratio:rate6h
-        expr: 1 - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[6h])) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[6h])), 1e-9)
+        expr: (sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[6h])) - sum(rate(eg_request_duration_seconds_bucket{route="/v1/check",le="1.5"}[6h]))) / clamp_min(sum(rate(eg_request_duration_seconds_count{route="/v1/check"}[6h])), 1e-9)
       - record: eg:check_latency_seconds:p95_5m
         expr: histogram_quantile(0.95, sum by (le) (rate(eg_request_duration_seconds_bucket{route="/v1/check"}[5m])))
 
