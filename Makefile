@@ -40,10 +40,10 @@ compose-down:
 ingest:             ## load the BioASQ corpus for the demo tenant
 	.venv/bin/evidencegate ingest --tenant demo --dataset bioasq
 
-seed:               ## seed the demo tenant's calibration from MedHallu (generated split)
-	.venv/bin/evidencegate seed --tenant demo --dataset medhallu-artificial --target 0.9 --limit 2000
+seed:               ## seed the demo tenant's calibration from SciFact expert labels
+	.venv/bin/evidencegate seed --tenant demo --dataset scifact --target 0.9
 
-kind-up: build      ## local Kubernetes with Prometheus, Grafana, Argo Rollouts
+kind-up: build      ## local Kubernetes with Prometheus, Grafana, Argo Rollouts (ARGOCD=1 for GitOps)
 	scripts/kind-up.sh
 
 kind-down:

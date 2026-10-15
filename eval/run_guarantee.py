@@ -2,11 +2,13 @@
 
     python eval/run_guarantee.py          (after run_detection.py has cached scores)
 
-1. **Guarantee.** MedHallu answers scored by the int8 MiniCheck checker are split at
-   random into calibration and test halves, 200 times. For each target recall the
-   conformal threshold is fitted on the calibration half; recall and false-alarm rate
-   are measured on the test half.
-2. **Review-queue simulation.** The same real scores replayed as traffic through a gate
+1. **Guarantee.** SciFact items (and, for contrast, MedHallu answers) scored by the int8
+   MiniCheck checker are split at random into calibration and test halves, 200 times.
+   For each target recall the conformal threshold is fitted on the calibration half;
+   recall and false-alarm rate are measured on the test half. The guarantee is on
+   average over calibration draws, so about half the splits land a little below the
+   target; ``recall_p5`` shows how far.
+2. **Review-queue simulation.** SciFact's real scores replayed as traffic through a gate
    at a 90% threshold: reviewers label every flagged answer plus a 2% random audit of
    passed ones. Recall estimated naively from the labels is compared with the
    inverse-probability weighted estimate and with the truth.
@@ -20,14 +22,17 @@ from common import cached, write
 from evidencegate.calibration import Label, fit, weighted_recall
 
 TARGETS = (0.8, 0.9, 0.95)
+SETS = ("scifact", "medhallu")  # the first one also drives the review-queue simulation
 
 
-def main() -> None:
-    rows = cached("medhallu-minicheck-int8", lambda: [])
+def scores(name: str) -> tuple[np.ndarray, np.ndarray]:
+    rows = cached(f"{name}-minicheck-int8", lambda: [])
     if not rows:
         raise SystemExit("run eval/run_detection.py first")
-    s = np.array([r.support for r in rows])
-    y = np.array([r.unsupported for r in rows])
+    return np.array([r.support for r in rows]), np.array([r.unsupported for r in rows])
+
+
+def guarantee_table(s: np.ndarray, y: np.ndarray) -> list[dict[str, float]]:
     rng = np.random.default_rng(0)
     guarantee = []
     for target in TARGETS:
@@ -54,6 +59,15 @@ def main() -> None:
             }
         )
         print(guarantee[-1], flush=True)
+    return guarantee
+
+
+def main() -> None:
+    guarantee = {}
+    for name in SETS:
+        print(name, flush=True)
+        guarantee[name] = guarantee_table(*scores(name))
+    s, y = scores(SETS[0])
 
     # Review-queue simulation on the real scores.
     fitted = fit([Label(float(a), bool(b)) for a, b in zip(s, y, strict=True)], 0.9)
@@ -83,11 +97,11 @@ def main() -> None:
         "interval_coverage": round(float(sim[:, 3].mean()), 3),
         "audit_rate": 0.02,
         "replays": len(sims),
+        "set": SETS[0],
+        "n": len(s),
     }
     print(review)
-    print(
-        "wrote", write("guarantee", {"guarantee": guarantee, "review_queue": review, "n": len(s)})
-    )
+    print("wrote", write("guarantee", {"guarantee": guarantee, "review_queue": review}))
 
 
 if __name__ == "__main__":

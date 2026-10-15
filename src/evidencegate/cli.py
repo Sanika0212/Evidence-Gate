@@ -4,7 +4,7 @@ evidencegate serve gateway|checker|retriever|calibrator|devauth [--port N]
 evidencegate worker triage
 evidencegate migrate
 evidencegate ingest --tenant demo --dataset bioasq
-evidencegate seed --tenant demo --dataset medhallu-artificial --target 0.9
+evidencegate seed --tenant demo --dataset scifact --target 0.9
 evidencegate recalibrate --all
 evidencegate drift --tenant demo
 evidencegate token --url http://localhost:8081 --client-id demo-client --secret demo-secret
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--tenant", default="demo")
     p = sub.add_parser("seed", help="seed a tenant's calibration from a public labelled set")
     p.add_argument("--tenant", default="demo")
-    p.add_argument("--dataset", default="medhallu-artificial")
+    p.add_argument("--dataset", default="scifact")
     p.add_argument("--target", type=float, default=0.9)
     p.add_argument("--limit", type=int, default=2000)
     p.add_argument("--seed", type=int, default=0)

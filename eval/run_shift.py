@@ -1,14 +1,14 @@
-"""What happens to a general-domain threshold on medical answers, and how many labels
+"""What happens to a general-domain threshold on biomedical claims, and how many labels
 does recalibration need to restore the guarantee?
 
     python eval/run_shift.py              (after run_detection.py)
 
 Calibration source: RAGTruth train (general QA, summaries, data-to-text), scored per
-answer (weakest sentence) like the medical set. Deployment: MedHallu's 2,000
-expert-labelled answers. The RAGTruth threshold for 90% recall is applied to the medical
-answers; then the threshold is refit on k medical labels drawn from one half and
-measured on the other half (100 draws per k). The PSI between the two score
-distributions is what the drift monitor would have seen.
+answer (weakest sentence). Deployments: SciFact's 1,259 claim and abstract pairs with
+expert labels, and MedHallu's 2,000 answers for contrast. The RAGTruth threshold for 90%
+recall is applied to each target; then the threshold is refit on k target labels drawn
+from one half and measured on the other half (100 draws per k). The PSI between the
+source and target score distributions is what the drift monitor would have seen.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from evidencegate.onnx_checker import load_checker
 
 TARGET = 0.9
 KS = (25, 50, 100, 200, 400)
+TARGET_SETS = ("scifact", "medhallu")
 
 
 def answer_level(rows: list[Scored]) -> list[Scored]:
@@ -37,32 +38,9 @@ def answer_level(rows: list[Scored]) -> list[Scored]:
     ]
 
 
-def main() -> None:
-    checker = load_checker("minicheck", "models")
-    source = answer_level(
-        cached(
-            "ragtruth-train-900-minicheck-int8",
-            lambda: score_ragtruth("train", checker, 300, seed=1),
-        )
-    )
-    target = cached("medhallu-minicheck-int8", lambda: [])
-    if not target:
-        raise SystemExit("run eval/run_detection.py first")
-    src = fit([Label(r.support, r.unsupported) for r in source], TARGET)
-    assert src is not None
-    s = np.array([r.support for r in target])
-    y = np.array([r.unsupported for r in target])
-    flagged = s < src.support
-    transfer = {
-        "source_threshold": round(src.support, 4),
-        "source_false_alarm": round(src.false_alarm_rate, 3),
-        "recall_on_medical": round(float(flagged[y].mean()), 3),
-        "false_alarm_on_medical": round(float(flagged[~y].mean()), 3),
-        "psi_source_vs_medical": round(psi([r.support for r in source], s), 3),
-    }
-    print(transfer, flush=True)
+def recalibration(s: np.ndarray, y: np.ndarray) -> list[dict[str, float | int | None]]:
     rng = np.random.default_rng(0)
-    curve = []
+    curve: list[dict[str, float | int | None]] = []
     for k in KS:
         recalls, fars, fitted_n = [], [], 0
         for _ in range(100):
@@ -86,17 +64,40 @@ def main() -> None:
             }
         )
         print(curve[-1], flush=True)
+    return curve
+
+
+def main() -> None:
+    checker = load_checker("minicheck", "models")
+    source = answer_level(
+        cached(
+            "ragtruth-train-900-minicheck-int8",
+            lambda: score_ragtruth("train", checker, 300, seed=1),
+        )
+    )
+    src = fit([Label(r.support, r.unsupported) for r in source], TARGET)
+    assert src is not None
+    results = {}
+    for name in TARGET_SETS:
+        rows = cached(f"{name}-minicheck-int8", lambda: [])
+        if not rows:
+            raise SystemExit("run eval/run_detection.py first")
+        s = np.array([r.support for r in rows])
+        y = np.array([r.unsupported for r in rows])
+        flagged = s < src.support
+        transfer = {
+            "source_threshold": round(src.support, 4),
+            "source_false_alarm": round(src.false_alarm_rate, 3),
+            "recall_on_target": round(float(flagged[y].mean()), 3),
+            "false_alarm_on_target": round(float(flagged[~y].mean()), 3),
+            "psi_source_vs_target": round(psi([r.support for r in source], s), 3),
+            "n": len(s),
+        }
+        print(name, transfer, flush=True)
+        results[name] = {"transfer": transfer, "recalibration": recalibration(s, y)}
     print(
         "wrote",
-        write(
-            "shift",
-            {
-                "target": TARGET,
-                "transfer": transfer,
-                "recalibration": curve,
-                "source_answers": len(source),
-            },
-        ),
+        write("shift", {"target_recall": TARGET, "source_answers": len(source), "sets": results}),
     )
 
 
