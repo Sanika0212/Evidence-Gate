@@ -566,6 +566,7 @@ def plot_shift(res: dict[str, Any], mode: str) -> None:
         )
         ax.set_xscale("log")
         ax.set_xticks(ks, [str(k) for k in ks])
+        ax.minorticks_off()
         ax.set_title(
             f"{names.get(key, key)} (PSI {tr['psi_source_vs_target']:.2f})",
             loc="left",
@@ -575,7 +576,7 @@ def plot_shift(res: dict[str, Any], mode: str) -> None:
         ax.grid()
         ax.legend(loc="lower right", fontsize=8)
     axes[0].set_ylabel("recall on held-out items")
-    axes[0].set_ylim(0.78, 0.98)
+    axes[0].set_ylim(0.7, 0.97)
     fig.subplots_adjust(left=0.08, right=0.98, top=0.77, bottom=0.15, wspace=0.08)
     title(
         fig,
@@ -607,7 +608,7 @@ def plot_retrieval(res: dict[str, Any], mode: str) -> None:
         xs = [i + (j - 0.5) * width for i in range(len(rows))]
         ax.bar(xs, [r[m] for r in rows], width=width * 0.92, color=color, label=m)
         for x, r in zip(xs, rows, strict=True):
-            ax.text(x, r[m] + 0.01, f"{r[m]:.2f}", ha="center", fontsize=8, color=t.ink2)
+            ax.text(x, r[m] + 0.01, f"{r[m]:.3f}", ha="center", fontsize=8, color=t.ink2)
     labels = [f"{n}\n{r['p50_ms']:.0f} ms" for n, r in zip(names, rows, strict=True)]
     ax.set_xticks(range(len(rows)), labels, fontsize=8.5)
     ax.set_ylim(0, max(r["ndcg@10"] for r in rows) * 1.2)
@@ -687,7 +688,7 @@ def plot_load(runs: list[tuple[str, dict[str, Any]]], mode: str) -> None:
     ax.set_ylim(0, None)
     ax2.set_ylabel("p95 latency (s)")
     ax2.set_ylim(0, None)
-    ax.legend(loc="upper left", fontsize=8)
+    ax.legend(loc="lower right", fontsize=8)
     fig.subplots_adjust(left=0.08, right=0.98, top=0.77, bottom=0.15, wspace=0.25)
     title(
         fig,

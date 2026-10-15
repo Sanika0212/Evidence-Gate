@@ -1,0 +1,31 @@
+{
+  "tenant": "demo",
+  "requests_per_phase": 150,
+  "normal": {
+    "status_codes": {
+      "200": 150
+    },
+    "seconds": 595,
+    "psi": 0.077,
+    "alert": "inactive"
+  },
+  "outage": {
+    "status_codes": {
+      "200": 150
+    },
+    "seconds": 1558,
+    "psi": 0.782,
+    "alert": "pending"
+  },
+  "alert_timeline_after_outage": [
+    {
+      "alert": "pending",
+      "t": 0
+    },
+    {
+      "alert": "firing",
+      "t": 450
+    }
+  ],
+  "outcome": "firing"
+}

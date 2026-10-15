@@ -1,0 +1,47 @@
+{
+  "fault_rate": 0.3,
+  "outcome": "aborted",
+  "seconds_to_outcome": 91.4,
+  "furthest_step": 2,
+  "timeline": [
+    {
+      "phase": "Progressing",
+      "aborted": false,
+      "message": "more replicas need to be updated",
+      "step": 0,
+      "t": 5.1
+    },
+    {
+      "phase": "Progressing",
+      "aborted": false,
+      "message": "old replicas are pending termination",
+      "step": 0,
+      "t": 10.2
+    },
+    {
+      "phase": "Paused",
+      "aborted": false,
+      "message": "CanaryPauseStep",
+      "step": 1,
+      "t": 20.3
+    },
+    {
+      "phase": "Progressing",
+      "aborted": false,
+      "message": "old replicas are pending termination",
+      "step": 2,
+      "t": 60.9
+    },
+    {
+      "phase": "Degraded",
+      "aborted": true,
+      "message": "RolloutAborted: Rollout aborted update to revision 11: Metric \"error-rate\" assessed Failed due to failed (2) > failureLimit (1)",
+      "step": 0,
+      "t": 91.4
+    }
+  ],
+  "client": {
+    "requests": 39,
+    "failed_share": 0
+  }
+}
