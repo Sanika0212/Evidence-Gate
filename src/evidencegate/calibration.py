@@ -31,7 +31,6 @@ from typing import Any, Protocol
 
 import numpy as np
 from groundsight.calibrate import conformal_threshold
-from groundsight.metrics import wilson_interval
 
 PSI_SHIFT = 0.25
 
@@ -154,22 +153,54 @@ def ks(expected: Sequence[float], actual: Sequence[float]) -> float:
     return float(np.max(np.abs(cdf_e - cdf_a)))
 
 
+def poisson_interval(k: int, confidence: float = 0.95) -> tuple[float, float]:
+    """Exact (Garwood) interval for a Poisson mean after observing ``k`` events."""
+    alpha = 1 - confidence
+
+    def cdf(lam: float, upto: int) -> float:
+        if upto < 0:
+            return 0.0
+        terms = [math.exp(-lam + i * math.log(lam) - math.lgamma(i + 1)) for i in range(upto + 1)]
+        return min(1.0, sum(terms)) if lam > 0 else 1.0
+
+    def solve(f: Any, lo: float, hi: float) -> float:
+        for _ in range(100):
+            mid = (lo + hi) / 2
+            if f(mid):
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2
+
+    top = k + 20 * math.sqrt(k + 1) + 20
+    upper = solve(lambda lam: cdf(lam, k) > alpha / 2, 0.0, top)
+    lower = 0.0 if k == 0 else solve(lambda lam: 1 - cdf(lam, k - 1) < alpha / 2, 0.0, top)
+    return lower, upper
+
+
 def weighted_recall(labels: Sequence[Label]) -> tuple[float, float, float, int, int]:
     """Recall of flagging on labelled unsupported claims, inverse-probability weighted.
 
-    Returns ``(estimate, lower, upper, n_unsupported, n_flagged)``; the interval is a
-    Wilson interval on the effective (Kish) sample size.
+    Flagged claims are reviewed in full, so the number caught is known. Missed claims
+    are seen only through the audit sample, so their number is uncertain: the interval
+    uses an exact Poisson interval on the audited misses, scaled by the audit weight.
+    (A normal approximation is far too narrow when only a handful of misses are audited.)
+
+    Returns ``(estimate, lower, upper, n_unsupported, n_flagged)``.
     """
     pos = [lab for lab in labels if lab.unsupported]
     if not pos:
         return 0.0, 0.0, 1.0, 0, 0
-    w = np.array([p.weight for p in pos], dtype=float)
-    hit = np.array([p.flagged for p in pos], dtype=float)
-    est = float((w * hit).sum() / w.sum())
-    n_eff = float(w.sum() ** 2 / (w**2).sum())
-    k = round(est * n_eff)
-    lo, hi = wilson_interval(k, max(1, round(n_eff)))
-    return est, lo, hi, len(pos), int(hit.sum())
+    caught = sum(lab.weight for lab in pos if lab.flagged)
+    missed = [lab for lab in pos if not lab.flagged]
+    missed_w = sum(lab.weight for lab in missed)
+    est = caught / (caught + missed_w)
+    audit_weight = max((lab.weight for lab in labels if lab.source == "audit"), default=1.0)
+    scale = missed_w / len(missed) if missed else audit_weight
+    lo_k, hi_k = poisson_interval(len(missed))
+    lower = caught / (caught + hi_k * scale) if caught + hi_k * scale > 0 else 0.0
+    upper = caught / (caught + lo_k * scale) if caught + lo_k * scale > 0 else 1.0
+    return est, lower, upper, len(pos), len(pos) - len(missed)
 
 
 def drift(

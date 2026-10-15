@@ -32,17 +32,18 @@ CHECKERS = {
     ),
     "word-overlap": lambda: load_checker("lexical"),
 }
-# (set, dataset, answers, checkers). The fp32 model only runs on a 600-answer subset:
-# its role is to show int8 loses nothing, measured on the same answers.
+# (set, dataset, items, checkers). SciFact (claim vs cited abstract, expert labels) is the
+# main biomedical grounding test; MedHallu is kept as a cautionary result: its reference
+# answers are the papers' conclusions, which the provided passages usually do not state.
 JOBS = [
     (
-        "medhallu",
-        "medhallu-labeled",
+        "scifact",
+        "scifact",
         0,
-        ["minicheck-int8", "nli-int8", "embedding-similarity", "word-overlap"],
+        ["minicheck-int8", "minicheck-fp32", "nli-int8", "embedding-similarity", "word-overlap"],
     ),
-    ("medhallu-600", "medhallu-labeled", 600, ["minicheck-int8", "minicheck-fp32"]),
     ("ragtruth", "ragtruth-test", 300, ["minicheck-int8", "embedding-similarity", "word-overlap"]),
+    ("medhallu", "medhallu-labeled", 0, ["minicheck-int8", "embedding-similarity", "word-overlap"]),
 ]
 
 

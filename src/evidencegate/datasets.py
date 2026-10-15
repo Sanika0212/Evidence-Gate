@@ -12,6 +12,9 @@ medhallu           UTAustin-AIHealth/MedHallu: PubMedQA questions with a       s
                    grounded answer and a hallucinated answer each
 ragtruth           wandb/RAGTruth-processed: answers from six LLMs with         see card
                    human span-level hallucination labels
+scifact            bigbio/scifact: 1,109 expert-written biomedical claims      CC BY-NC
+                   with the abstracts they cite, labelled support, contradict
+                   or no evidence
 =================  ==========================================================  ========
 """
 
@@ -37,6 +40,12 @@ FILES = {
     "medhallu-artificial": ("UTAustin-AIHealth/MedHallu", "pqa_artificial/train/0000.parquet"),
     "ragtruth-train": ("wandb/RAGTruth-processed", "default/train/0000.parquet"),
     "ragtruth-test": ("wandb/RAGTruth-processed", "default/test/0000.parquet"),
+    "scifact-corpus": ("bigbio/scifact", "scifact_corpus_source/train/0000.parquet"),
+    "scifact-claims-train": ("bigbio/scifact", "scifact_claims_source/train/0000.parquet"),
+    "scifact-claims-validation": (
+        "bigbio/scifact",
+        "scifact_claims_source/validation/0000.parquet",
+    ),
 }
 
 
@@ -137,4 +146,40 @@ def medhallu(config: str = "labeled") -> list[LabelledAnswer]:
                 str(row.get("Difficulty Level") or ""),
             )
         )
+    return out
+
+
+def scifact() -> list[LabelledAnswer]:
+    """One item per (claim, cited abstract): supported only if the abstract supports it.
+
+    Unsupported covers both CONTRADICT and claims the abstract says nothing about, which
+    is the gate's notion of "not supported by the passage".
+    """
+    corpus = read("scifact-corpus")
+    docs = {
+        int(r.doc_id): " ".join([str(r.title), *[str(x) for x in r.abstract]])
+        for r in corpus.itertuples(index=False)
+    }
+    out = []
+    for split in ("train", "validation"):
+        claims = read(f"scifact-claims-{split}")
+        for r in claims.itertuples(index=False):
+            labels: dict[int, str] = {}
+            for ev in r.evidences if r.evidences is not None else []:
+                labels.setdefault(int(ev["doc_id"]), str(ev["label"]).upper())
+            for doc_id in r.cited_doc_ids:
+                text = docs.get(int(doc_id))
+                if not text:
+                    continue
+                label = labels.get(int(doc_id), "NOINFO")
+                out.append(
+                    LabelledAnswer(
+                        f"scifact-{split}-{r.id}-{doc_id}",
+                        "",
+                        [text],
+                        str(r.claim),
+                        label != "SUPPORT",
+                        label.lower(),
+                    )
+                )
     return out

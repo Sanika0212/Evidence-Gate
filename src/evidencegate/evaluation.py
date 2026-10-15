@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from evidencegate.datasets import LabelledAnswer, medhallu
+from evidencegate.datasets import LabelledAnswer, medhallu, scifact
 
 
 @dataclass
@@ -109,6 +109,11 @@ def score_answers(
 ) -> list[Scored]:
     if dataset.startswith("medhallu-"):
         items = sample_pairs(medhallu(dataset.split("-", 1)[1]), limit, seed)
+        return score_labelled_answers(items, checker, progress=progress)
+    if dataset == "scifact":
+        items = scifact()
+        if limit and limit < len(items):
+            items = random.Random(seed).sample(items, limit)
         return score_labelled_answers(items, checker, progress=progress)
     if dataset.startswith("ragtruth-"):
         per_task = limit // 3 if limit else None
