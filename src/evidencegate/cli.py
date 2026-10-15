@@ -102,7 +102,9 @@ def serve(args: argparse.Namespace, settings: Settings) -> None:
                     ),
                 )
             ],
-            workers=4,
+            # Requests waiting for an inference slot hold a worker thread; keep spare
+            # threads so health checks are always answered.
+            workers=settings.checker_concurrency + 8,
         )
     elif args.service == "retriever":
         from evidencegate.embedding import load_embedder, load_reranker
@@ -291,11 +293,8 @@ def recalibrate(args: argparse.Namespace, settings: Settings) -> None:
             ]
     log = get_logger("evidencegate.recalibrate")
     for tenant in tenants:
+        # The calibrator exports the drift gauges when it answers this call.
         d = stub.Drift(calibrator_pb2.DriftRequest(tenant=tenant, window=2000), timeout=60)
-        from evidencegate.telemetry import DRIFT_PSI, RECALL_LOWER
-
-        DRIFT_PSI.labels(tenant=tenant).set(d.psi)
-        RECALL_LOWER.labels(tenant=tenant).set(d.recall_lower)
         if d.needs_recalibration or args.force:
             f = stub.Fit(
                 calibrator_pb2.FitRequest(tenant=tenant, min_unsupported=args.min_unsupported),

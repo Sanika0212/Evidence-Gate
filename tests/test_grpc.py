@@ -120,6 +120,10 @@ def test_end_to_end_over_grpc(servers: dict[str, str]) -> None:
         calibrator_pb2.DriftRequest(tenant="demo"), timeout=10
     )
     assert drift.live_n == len(resp.claims)
+    # The scraped service exports the drift gauge (the CronJob process never is scraped).
+    from evidencegate.telemetry import DRIFT_PSI
+
+    assert DRIFT_PSI.labels(tenant="demo")._value.get() == pytest.approx(drift.psi)
 
 
 def test_retrieval_modes_over_grpc(servers: dict[str, str]) -> None:

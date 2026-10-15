@@ -16,7 +16,14 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from evidencegate.calibration import Calibrator, FittedThresholds
 from evidencegate.retrieval import Mode, Retriever
-from evidencegate.telemetry import GRPC_ERRORS, STAGE_LATENCY, THRESHOLD, get_logger
+from evidencegate.telemetry import (
+    DRIFT_PSI,
+    GRPC_ERRORS,
+    RECALL_LOWER,
+    STAGE_LATENCY,
+    THRESHOLD,
+    get_logger,
+)
 from evidencegate.v1 import (
     calibrator_pb2,
     calibrator_pb2_grpc,
@@ -235,6 +242,10 @@ class CalibratorServicer(calibrator_pb2_grpc.CalibratorServiceServicer):
 
     def Drift(self, request: Any, context: Any) -> calibrator_pb2.DriftResponse:
         r = self.calibrator.drift(request.tenant, request.window or 2000)
+        # Exported here, by the long-running service Prometheus scrapes: the CronJob that
+        # calls this exits before any scrape, so gauges set there would never be seen.
+        DRIFT_PSI.labels(tenant=request.tenant).set(r.psi)
+        RECALL_LOWER.labels(tenant=request.tenant).set(r.recall_lower)
         return calibrator_pb2.DriftResponse(
             psi=r.psi,
             ks=r.ks,

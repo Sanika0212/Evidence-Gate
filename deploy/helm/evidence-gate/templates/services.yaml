@@ -43,8 +43,8 @@ spec:
           ports:
             - { name: grpc, containerPort: {{ $svc.port }} }
             - { name: metrics, containerPort: 9100 }
-          readinessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 5 }
-          livenessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 20, initialDelaySeconds: 30 }
+          readinessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 5, timeoutSeconds: 3 }
+          livenessProbe: { grpc: { port: {{ $svc.port }} }, periodSeconds: 20, initialDelaySeconds: 30, timeoutSeconds: 5, failureThreshold: 6 }
           resources: {{- toYaml $svc.values.resources | nindent 12 }}
           volumeMounts:
             - { name: models, mountPath: /models }
@@ -95,8 +95,8 @@ spec:
           {{- include "eg.env" . | nindent 10 }}
           {{- include "eg.containerSecurity" . | nindent 10 }}
           ports: [{ name: http, containerPort: 8080 }]
-          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
-          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, initialDelaySeconds: 20 }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5, timeoutSeconds: 3 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 20, initialDelaySeconds: 20, timeoutSeconds: 5, failureThreshold: 6 }
           resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
           volumeMounts: [{ name: tmp, mountPath: /tmp }]
       volumes: [{ name: tmp, emptyDir: {} }]
