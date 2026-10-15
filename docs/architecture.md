@@ -36,8 +36,10 @@ flowchart LR
    maps it to a tenant (a `tenant` claim, or the tenant registered for its `client_id`).
 2. **Rate-limit.** A token bucket per tenant, atomic in Redis so every replica shares it.
 3. **Retrieve, if needed.** Callers usually send the passages their model saw. If they
-   don't, the retriever runs Postgres full-text search and a pgvector HNSW search, fuses
-   them with reciprocal rank fusion and reorders the top 20 with a cross-encoder.
+   don't, the retriever runs BM25 over stemmed postings in Postgres and a pgvector HNSW
+   search and fuses them with reciprocal rank fusion; a cross-encoder can reorder the top
+   results, but it adds about 0.7 s and did not beat stemmed BM25 on BioASQ, so it is
+   opt-in.
 4. **Thresholds.** The calibrator returns the tenant's current threshold version.
 5. **Check.** The checker runs Groundsight's audit with ONNX MiniCheck (support) and
    DeBERTa NLI (contradiction): every claim against every passage, in windows for long
@@ -52,7 +54,7 @@ flowchart LR
 
 | Service | Bound by | Scales on | Changes when |
 |---|---|---|---|
-| gateway | I/O | CPU (HPA), 2+ replicas | API or policy changes |
+| gateway | I/O and PII redaction (spaCy) | CPU (HPA), 2+ replicas | API or policy changes |
 | checker | CPU (transformer inference) | CPU (HPA), canary on every release | the model changes |
 | retriever | CPU and Postgres | CPU (HPA) | the embedder or corpus changes |
 | calibrator | Postgres | 1 replica is enough | the statistics change |
@@ -62,6 +64,20 @@ The checker is the expensive part and the one whose model changes most often, so
 scales and ships (as an Argo Rollouts canary) on its own. A slow LLM in triage can never
 slow the request path because triage is behind a queue. At low traffic a single process
 would do; the split follows where the load test showed different needs.
+
+## Calls between services
+
+A Kubernetes Service balances connections, and a gRPC channel keeps one long-lived HTTP/2
+connection, so by default each gateway would send every call to a single checker pod and
+a second replica would sit idle. The internal services therefore also have headless
+Services (`evidence-gate-<name>-pods`); clients dial `dns:///` names with gRPC's
+per-call `round_robin` policy (`EG_GRPC_LB_POLICY`), and servers close connections after
+30 seconds so clients resolve DNS again and find replicas the autoscaler added. The load
+test in the README compares both policies.
+
+A checker pod runs at most `EG_CHECKER_CONCURRENCY` inferences at once (each holds its
+own activations) and queues the rest; it keeps spare worker threads so health checks are
+answered while it is busy.
 
 ## Data ownership
 

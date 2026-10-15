@@ -2,10 +2,10 @@
 
     .venv/bin/python scripts/make_figures.py
 
-Inputs: ``runs/{detection,guarantee,shift,retrieval,load}/results.json`` from the
-evaluation scripts. The banner and the animation are drawn here; the animation uses
-real scores from the exported ONNX checker on the demo example, and the demo tenant's
-real calibrated threshold when ``runs/seed/result.json`` exists.
+Inputs: ``runs/*/results.json`` from the evaluation scripts, the PII leak test and the
+load tests. The banner and the animation are drawn here; the animation uses real scores
+from the exported ONNX checker on the demo example, and the demo tenant's real
+calibrated threshold when ``runs/seed/results.json`` exists.
 Outputs go to ``docs/assets/<name>-{light,dark}.*``.
 """
 
@@ -195,11 +195,11 @@ def demo_audit() -> tuple[list[dict[str, Any]], float, str]:
 
     from evidencegate.onnx_checker import load_checker
 
-    seed = RUNS / "seed" / "result.json"
+    seed = RUNS / "seed" / "results.json"
     threshold, calibration = 0.5, "default"
     if seed.exists():
         s = json.loads(seed.read_text())
-        threshold, calibration = float(s["threshold"]), "seeded on MedHallu, 90% recall"
+        threshold, calibration = float(s["threshold"]), "seeded on SciFact, 90% recall"
     passages = [
         "Aspirin irreversibly inhibits cyclooxygenase-1 and -2 by acetylating a serine residue in the active site, which blocks thromboxane A2 synthesis in platelets.",
         "Aspirin can relieve acute migraine pain; it does not prevent future attacks.",
@@ -393,10 +393,11 @@ LABELS = {
 def plot_detection(rows: list[dict[str, Any]], mode: str) -> None:
     t = use_theme(mode)
     sets = [
-        ("medhallu", "MedHallu (medical QA, 2,000 answers)"),
-        ("ragtruth", "RAGTruth (general, per sentence)"),
+        ("scifact", "SciFact: 1,259 claims vs cited abstracts"),
+        ("ragtruth", "RAGTruth: 2,035 answer sentences"),
+        ("medhallu", "MedHallu: 2,000 answers (labels doubtful)"),
     ]
-    fig, axes = plt.subplots(1, 2, figsize=(9.2, 3.4), sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(11.6, 3.5), sharey=True)
     order = [k for k in LABELS if any(r["checker"] == k for r in rows)]
     for ax, (key, name) in zip(axes, sets, strict=True):
         data = {r["checker"]: r for r in rows if r["set"] == key}
@@ -406,13 +407,13 @@ def plot_detection(rows: list[dict[str, Any]], mode: str) -> None:
             r = data[k]
             color = (
                 t.series[0]
-                if k.startswith("minicheck-int8")
+                if k.startswith("minicheck")
                 else (t.series[1] if k in ("embedding-similarity", "word-overlap") else t.series[2])
             )
             ax.plot(r["ci95"], [y, y], color=color, lw=2.2, solid_capstyle="round")
             ax.plot(r["auroc"], y, "o", color=color, ms=7)
             ax.text(
-                r["ci95"][1] + 0.012,
+                r["ci95"][1] + 0.015,
                 y,
                 f"{r['auroc']:.3f}",
                 va="center",
@@ -420,17 +421,18 @@ def plot_detection(rows: list[dict[str, Any]], mode: str) -> None:
                 color=t.ink2,
             )
         ax.axvline(0.5, color=t.axis, lw=1, ls="--")
-        ax.set_xlim(0.45, 1.0)
+        ax.set_xlim(0.3, 1.0)
         ax.set_title(name, fontsize=9.5, loc="left", color=t.ink)
         ax.grid(axis="x")
         ax.set_xlabel("AUROC (95% bootstrap interval)")
     axes[0].set_yticks(range(len(order)), [LABELS[k] for k in order[::-1]])
     axes[0].tick_params(axis="y", length=0)
-    fig.subplots_adjust(left=0.27, right=0.98, top=0.78, bottom=0.17, wspace=0.08)
+    fig.subplots_adjust(left=0.19, right=0.985, top=0.77, bottom=0.17, wspace=0.1)
     title(
         fig,
-        "Does the gate catch unsupported content?",
-        "Higher is better; 0.5 is chance. The served checker is the int8 ONNX MiniCheck.",
+        "Does the gate catch unsupported claims?",
+        "0.5 is chance. On MedHallu even the best checker is weak: its reference answers"
+        " are often not stated in the passages it provides.",
         t,
     )
     save(fig, "detection", mode)
@@ -438,105 +440,167 @@ def plot_detection(rows: list[dict[str, Any]], mode: str) -> None:
 
 def plot_guarantee(res: dict[str, Any], mode: str) -> None:
     t = use_theme(mode)
-    fig, ax = plt.subplots(figsize=(6.4, 3.4))
-    rows = res["guarantee"]
-    targets = [r["target"] for r in rows]
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.4, 3.4))
+    names = {"scifact": "SciFact", "medhallu": "MedHallu"}
     ax.plot([0.75, 1.0], [0.75, 1.0], color=t.axis, lw=1, ls="--", label="achieved = target")
-    ax.plot(
-        targets,
-        [r["recall_mean"] for r in rows],
-        "o-",
-        color=t.series[0],
-        lw=2,
-        label="mean recall on held-out answers",
-    )
-    ax.plot(
-        targets,
-        [r["recall_p5"] for r in rows],
-        "o:",
-        color=t.series[0],
-        lw=1.4,
-        alpha=0.7,
-        label="5th percentile over 200 splits",
-    )
-    for r in rows:
-        ax.text(
-            r["target"] + 0.004,
-            r["recall_mean"] - 0.012,
-            f"false alarms {r['false_alarm_mean']:.0%}",
-            fontsize=8,
-            color=t.ink2,
+    for i, (key, rows) in enumerate(res["guarantee"].items()):
+        color = t.series[0] if i == 0 else t.series[1]
+        targets = [r["target"] for r in rows]
+        ax.plot(
+            targets,
+            [r["recall_mean"] for r in rows],
+            "o-",
+            color=color,
+            lw=2,
+            label=f"{names.get(key, key)}: mean",
         )
-    ax.set_xlim(0.77, 0.99)
-    ax.set_ylim(0.7, 1.0)
-    ax.set_xlabel("target recall (share of unsupported answers to flag)")
-    ax.set_ylabel("achieved recall")
+        ax.plot(
+            targets,
+            [r["recall_p5"] for r in rows],
+            "o:",
+            color=color,
+            lw=1.3,
+            alpha=0.7,
+            label=f"{names.get(key, key)}: 5th percentile",
+        )
+        ax2.plot(
+            targets,
+            [r["false_alarm_mean"] for r in rows],
+            "o-",
+            color=color,
+            lw=2,
+            label=names.get(key, key),
+        )
+        for r in rows:
+            ax2.text(
+                r["target"],
+                r["false_alarm_mean"] + 0.03,
+                f"{r['false_alarm_mean']:.0%}",
+                ha="center",
+                fontsize=8,
+                color=t.ink2,
+            )
+    ax.set_xlim(0.77, 0.98)
+    ax.set_ylim(0.72, 1.0)
+    ax.set_xlabel("target recall")
+    ax.set_ylabel("achieved recall (held-out half)")
     ax.grid()
-    ax.legend(loc="lower right")
-    fig.subplots_adjust(left=0.12, right=0.97, top=0.78, bottom=0.15)
+    ax.legend(loc="lower right", fontsize=8)
+    ax2.set_xlim(0.77, 0.98)
+    ax2.set_ylim(0, 1)
+    ax2.set_xlabel("target recall")
+    ax2.set_ylabel("supported claims flagged anyway")
+    ax2.grid()
+    ax2.legend(loc="upper left", fontsize=8)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.77, bottom=0.15, wspace=0.28)
     title(
         fig,
-        "The recall guarantee holds on MedHallu",
+        "The recall promise holds on average; the checker decides what it costs",
         "Conformal thresholds fitted on one half, measured on the other, 200 random splits.",
         t,
     )
     save(fig, "guarantee", mode)
 
 
-def plot_shift(res: dict[str, Any], mode: str) -> None:
+def plot_review(res: dict[str, Any], mode: str) -> None:
     t = use_theme(mode)
-    fig, ax = plt.subplots(figsize=(6.4, 3.4))
-    curve = [c for c in res["recalibration"] if c["recall_mean"] is not None]
-    ks = [c["labels"] for c in curve]
-    ax.axhline(res["target"], color=t.ink, lw=1, ls="--")
-    ax.text(ks[-1], res["target"] + 0.008, "target", ha="right", fontsize=8.5, color=t.ink2)
-    ax.plot(
-        ks,
-        [c["recall_mean"] for c in curve],
-        "o-",
-        color=t.series[2],
-        lw=2,
-        label="recalibrated on k medical labels (mean)",
-    )
-    ax.plot(
-        ks,
-        [c["recall_p10"] for c in curve],
-        "o:",
-        color=t.series[2],
-        lw=1.3,
-        alpha=0.7,
-        label="10th percentile",
-    )
-    tr = res["transfer"]
-    ax.axhline(tr["recall_on_medical"], color=t.series[1], lw=2)
-    ax.text(
-        ks[0],
-        tr["recall_on_medical"] - 0.025,
-        f"general-domain threshold on medical answers: {tr['recall_on_medical']:.0%}",
-        fontsize=8.5,
-        color=t.series[1],
-    )
-    ax.set_xscale("log")
-    ax.set_xticks(ks, [str(k) for k in ks])
-    ax.set_xlabel("labelled medical answers used to recalibrate")
-    ax.set_ylabel("recall on held-out answers")
-    ax.grid()
-    ax.legend(loc="lower right")
-    fig.subplots_adjust(left=0.12, right=0.97, top=0.78, bottom=0.15)
+    q = res["review_queue"]
+    fig, ax = plt.subplots(figsize=(6.4, 2.6))
+    rows = [
+        ("true recall", q["true_recall"], t.ink2),
+        ("weighted estimate", q["weighted_estimate_mean"], t.series[2]),
+        ("naive estimate (labels only)", q["naive_estimate_mean"], t.series[1]),
+    ]
+    for y, (_name, v, color) in enumerate(rows):
+        ax.barh(y, v, color=color, height=0.55)
+        ax.text(v + 0.004, y, f"{v:.3f}", va="center", fontsize=9, color=t.ink2)
+    ax.set_yticks(range(len(rows)), [r[0] for r in rows])
+    ax.tick_params(axis="y", length=0)
+    ax.set_xlim(0.8, 1.02)
+    ax.grid(axis="x")
+    ax.set_xlabel("recall at the 90% threshold")
+    fig.subplots_adjust(left=0.33, right=0.97, top=0.72, bottom=0.2)
     title(
         fig,
-        "Domain shift breaks a borrowed threshold; a few labels fix it",
-        f"Threshold for 90% recall fitted on RAGTruth, applied to MedHallu (PSI {tr['psi_source_vs_medical']:.2f}).",
+        "Reviewer labels alone overstate recall",
+        f"Every flag reviewed, {q['audit_rate']:.0%} of passes audited, {q['replays']} replays."
+        f" The weighted 95% interval covered the truth in {q['interval_coverage']:.0%}.",
+        t,
+    )
+    save(fig, "review", mode)
+
+
+def plot_shift(res: dict[str, Any], mode: str) -> None:
+    t = use_theme(mode)
+    names = {"scifact": "SciFact", "medhallu": "MedHallu"}
+    sets = res["sets"]
+    fig, axes = plt.subplots(1, len(sets), figsize=(9.4, 3.4), sharey=True)
+    target = res["target_recall"]
+    for ax, (key, r) in zip(axes, sets.items(), strict=True):
+        curve = [c for c in r["recalibration"] if c["recall_mean"] is not None]
+        ks = [c["labels"] for c in curve]
+        tr = r["transfer"]
+        ax.axhline(target, color=t.ink, lw=1, ls="--")
+        ax.plot(
+            ks,
+            [c["recall_mean"] for c in curve],
+            "o-",
+            color=t.series[2],
+            lw=2,
+            label="refit on k target labels (mean)",
+        )
+        ax.plot(
+            ks,
+            [c["recall_p10"] for c in curve],
+            "o:",
+            color=t.series[2],
+            lw=1.3,
+            alpha=0.7,
+            label="10th percentile",
+        )
+        ax.axhline(
+            tr["recall_on_target"],
+            color=t.series[1],
+            lw=2,
+            label=f"RAGTruth threshold as is: {tr['recall_on_target']:.1%}",
+        )
+        ax.set_xscale("log")
+        ax.set_xticks(ks, [str(k) for k in ks])
+        ax.set_title(
+            f"{names.get(key, key)} (PSI {tr['psi_source_vs_target']:.2f})",
+            loc="left",
+            fontsize=9.5,
+        )
+        ax.set_xlabel("labelled target items used to refit")
+        ax.grid()
+        ax.legend(loc="lower right", fontsize=8)
+    axes[0].set_ylabel("recall on held-out items")
+    axes[0].set_ylim(0.78, 0.98)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.77, bottom=0.15, wspace=0.08)
+    title(
+        fig,
+        "A borrowed threshold may or may not survive a shift",
+        "Threshold for 90% recall fitted on RAGTruth. It held on SciFact and fell short on"
+        " MedHallu, where 50 labels restored the mean.",
         t,
     )
     save(fig, "shift", mode)
 
 
+SYSTEMS = {
+    "bm25 without stemming (rank-bm25)": "BM25, unstemmed",
+    "lexical": "BM25, stemmed",
+    "dense": "dense",
+    "hybrid": "hybrid (RRF)",
+    "hybrid_rerank": "hybrid + reranker",
+}
+
+
 def plot_retrieval(res: dict[str, Any], mode: str) -> None:
     t = use_theme(mode)
     rows = res["results"]
-    fig, ax = plt.subplots(figsize=(7.6, 3.3))
-    names = [r["system"].replace("_", " + ") for r in rows]
+    fig, ax = plt.subplots(figsize=(7.8, 3.4))
+    names = [SYSTEMS.get(r["system"], r["system"]) for r in rows]
     metrics = [("recall@10", t.series[0]), ("ndcg@10", t.series[2])]
     width = 0.38
     for j, (m, color) in enumerate(metrics):
@@ -544,52 +608,93 @@ def plot_retrieval(res: dict[str, Any], mode: str) -> None:
         ax.bar(xs, [r[m] for r in rows], width=width * 0.92, color=color, label=m)
         for x, r in zip(xs, rows, strict=True):
             ax.text(x, r[m] + 0.01, f"{r[m]:.2f}", ha="center", fontsize=8, color=t.ink2)
-    ax.set_xticks(range(len(rows)), names, fontsize=8.5)
-    ax.set_ylim(0, max(r["recall@10"] for r in rows) * 1.25)
+    labels = [f"{n}\n{r['p50_ms']:.0f} ms" for n, r in zip(names, rows, strict=True)]
+    ax.set_xticks(range(len(rows)), labels, fontsize=8.5)
+    ax.set_ylim(0, max(r["ndcg@10"] for r in rows) * 1.2)
     ax.grid(axis="y")
     ax.legend(loc="upper left", ncol=2)
-    fig.subplots_adjust(left=0.07, right=0.98, top=0.78, bottom=0.14)
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.77, bottom=0.18)
     title(
         fig,
-        "Hybrid retrieval with reranking finds more evidence",
-        f"BioASQ, {res['questions']} questions over {res['passages']:,} PubMed abstracts, served by the retriever's own store.",
+        "Stemmed BM25 in Postgres matches hybrid retrieval with reranking",
+        f"BioASQ, {res['questions']} questions over {res['passages']:,} PubMed abstracts;"
+        " median latency under each bar. Reranking is opt-in.",
         t,
     )
     save(fig, "retrieval", mode)
 
 
-def plot_load(res: dict[str, Any], mode: str) -> None:
+PII_KINDS = {
+    "first_name": "first name",
+    "last_name": "last name",
+    "address": "street address",
+    "dob": "date of birth",
+    "phone": "phone",
+    "email": "email",
+    "ssn": "SSN",
+    "mrn": "record number",
+    "ip": "IP address",
+}
+
+
+def plot_pii(runs: list[tuple[str, dict[str, Any]]], mode: str) -> None:
     t = use_theme(mode)
-    fig, ax = plt.subplots(figsize=(6.4, 3.3))
-    rows = res["steps"]
-    ax.plot(
-        [r["rps"] for r in rows],
-        [r["p95_ms"] for r in rows],
-        "o-",
-        color=t.series[0],
-        lw=2,
-        label="p95",
-    )
-    ax.plot(
-        [r["rps"] for r in rows],
-        [r["p50_ms"] for r in rows],
-        "o-",
-        color=t.series[2],
-        lw=2,
-        label="p50",
-    )
-    for r in rows:
-        ax.text(
-            r["rps"], r["p95_ms"] * 1.04, f"{r['vus']} users", fontsize=8, color=t.ink2, ha="center"
+    fig, ax = plt.subplots(figsize=(8.4, 3.3))
+    kinds = list(PII_KINDS)
+    width = 0.8 / len(runs)
+    for j, (name, res) in enumerate(runs):
+        xs = [i + (j - (len(runs) - 1) / 2) * width for i in range(len(kinds))]
+        vals = [res["by_kind"].get(k, {}).get("leaked", 0) for k in kinds]
+        ax.bar(
+            xs,
+            vals,
+            width=width * 0.92,
+            color=t.series[[1, 3, 2][j % 3]],
+            label=f"{name}: {res['identifiers_leaked']:,} leaked",
         )
-    ax.axhline(1500, color=t.ink, lw=1, ls="--")
-    ax.text(rows[0]["rps"], 1530, "SLO: p95 under 1.5 s", fontsize=8.5, color=t.ink2)
-    ax.set_xlabel("checks per second")
-    ax.set_ylabel("latency (ms)")
-    ax.grid()
-    ax.legend(loc="upper left")
-    fig.subplots_adjust(left=0.13, right=0.97, top=0.78, bottom=0.15)
-    title(fig, "Throughput and latency under load", res.get("where", ""), t)
+    ax.set_xticks(range(len(kinds)), [PII_KINDS[k] for k in kinds], fontsize=8.5)
+    ax.set_ylabel("identifiers found in a sink")
+    ax.grid(axis="y")
+    ax.legend(loc="upper right", fontsize=8.5)
+    seeded = runs[0][1]["identifiers_seeded"]
+    fig.subplots_adjust(left=0.09, right=0.98, top=0.77, bottom=0.14)
+    title(
+        fig,
+        "PII leak test: what reaches storage, the queue, logs and traces",
+        f"{runs[0][1]['requests']:,} requests carrying {seeded:,} synthetic identifiers;"
+        " each run scans every sink afterwards.",
+        t,
+    )
+    save(fig, "pii", mode)
+
+
+def plot_load(runs: list[tuple[str, dict[str, Any]]], mode: str) -> None:
+    t = use_theme(mode)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.4, 3.4))
+    for j, (name, res) in enumerate(runs):
+        rows = res["steps"]
+        color = t.series[j % len(t.series)]
+        vus = [r["vus"] for r in rows]
+        ax.plot(vus, [r["rps"] for r in rows], "o-", color=color, lw=2, label=name)
+        ax2.plot(vus, [r["p95_ms"] / 1000 for r in rows], "o-", color=color, lw=2, label=name)
+    for a in (ax, ax2):
+        a.set_xscale("log", base=2)
+        a.set_xlabel("concurrent users")
+        a.grid()
+        xs = sorted({r["vus"] for _, res in runs for r in res["steps"]})
+        a.set_xticks(xs, [str(x) for x in xs])
+    ax.set_ylabel("checks per second")
+    ax.set_ylim(0, None)
+    ax2.set_ylabel("p95 latency (s)")
+    ax2.set_ylim(0, None)
+    ax.legend(loc="upper left", fontsize=8)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.77, bottom=0.15, wspace=0.25)
+    title(
+        fig,
+        "Checker replicas add throughput once calls are balanced per request",
+        runs[0][1].get("where", "") + "; every request is new to the score cache.",
+        t,
+    )
     save(fig, "load", mode)
 
 
@@ -599,18 +704,39 @@ def main() -> None:
         (ASSETS / f"banner-{mode}.svg").write_text(banner(mode))
         print(ASSETS / f"banner-{mode}.svg")
     claims, threshold, calibration = demo_audit()
+    pii = [
+        (name, r)
+        for name, key in (
+            ("first version, small model", "pii-first-version"),
+            ("fixes, small model", "pii-small-model"),
+            ("fixes, large model (default)", "pii"),
+        )
+        if (r := load(key)) is not None
+    ]
+    load_runs = [
+        (name, r)
+        for name, key in (
+            ("1 checker", "load-1-checker"),
+            ("2 checkers, one connection (pick_first)", "load-2-checkers-pick-first"),
+            ("2 checkers, per-call round robin", "load-2-checkers"),
+        )
+        if (r := load(key)) is not None
+    ]
     for mode in THEMES:
         animate(claims, threshold, calibration, mode)
         if (d := load("detection")) is not None:
             plot_detection(d, mode)
         if (g := load("guarantee")) is not None:
             plot_guarantee(g, mode)
+            plot_review(g, mode)
         if (s := load("shift")) is not None:
             plot_shift(s, mode)
         if (r := load("retrieval")) is not None:
             plot_retrieval(r, mode)
-        if (lo := load("load")) is not None:
-            plot_load(lo, mode)
+        if pii:
+            plot_pii(pii, mode)
+        if load_runs:
+            plot_load(load_runs, mode)
 
 
 if __name__ == "__main__":
