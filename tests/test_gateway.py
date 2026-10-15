@@ -199,3 +199,29 @@ def test_health_metrics_and_demo(stack: dict[str, Any]) -> None:
     assert "Evidence Gate" in c.get("/").text
     demo = c.post("/demo/check", json={"answer": "Metformin is the first-line medication."})
     assert demo.status_code == 200
+
+
+def test_backends_are_built_once_under_concurrent_first_requests(
+    stack: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+    import time
+
+    from evidencegate.config import Settings
+    from evidencegate.gateway import app as gateway_app
+
+    built = []
+
+    def slow_build(settings: Settings) -> Any:
+        built.append(1)
+        time.sleep(0.05)
+        return stack["backends"]
+
+    monkeypatch.setattr(gateway_app, "build_backends", slow_build)
+    app = gateway_app.create_app(Settings(demo=True))
+    threads = [threading.Thread(target=app.state.warm_up) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(built) == 1

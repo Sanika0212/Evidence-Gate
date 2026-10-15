@@ -9,6 +9,7 @@ flagged answers, a triage job. The decision is returned before triage runs.
 from __future__ import annotations
 
 import random
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -180,10 +181,11 @@ def build_backends(settings: Settings) -> Backends:  # pragma: no cover - wiring
     sqs = boto3.client(
         "sqs", endpoint_url=settings.sqs_endpoint or None, region_name=settings.aws_region
     )
+    lb = settings.grpc_lb_policy
     clients = Clients(
-        retriever_pb2_grpc.RetrieverServiceStub(channel(settings.retriever_addr)),
-        checker_pb2_grpc.CheckerServiceStub(channel(settings.checker_addr)),
-        calibrator_pb2_grpc.CalibratorServiceStub(channel(settings.calibrator_addr)),
+        retriever_pb2_grpc.RetrieverServiceStub(channel(settings.retriever_addr, lb)),
+        checker_pb2_grpc.CheckerServiceStub(channel(settings.checker_addr, lb)),
+        calibrator_pb2_grpc.CalibratorServiceStub(channel(settings.calibrator_addr, lb)),
         timeout=settings.grpc_timeout_s,
     )
     return Backends(
@@ -209,11 +211,20 @@ def build_backends(settings: Settings) -> Backends:  # pragma: no cover - wiring
 def create_app(settings: Settings, backends: Backends | None = None) -> FastAPI:
     app = FastAPI(title="Evidence Gate", version=__version__, docs_url="/docs", redoc_url=None)
     state: dict[str, Backends] = {}
+    lock = threading.Lock()
 
     def be() -> Backends:
+        # Built once: concurrent first requests used to build it in parallel, loading the
+        # spaCy model several times over and running the pod out of memory.
         if "b" not in state:
-            state["b"] = backends or build_backends(settings)
+            with lock:
+                if "b" not in state:
+                    state["b"] = backends or build_backends(settings)
         return state["b"]
+
+    # `evidencegate serve gateway` calls this before accepting traffic, so the model is
+    # loaded before the pod reports ready and the first request is not slow.
+    app.state.warm_up = be
 
     rng = (backends.rng if backends and backends.rng else None) or random.Random()
 

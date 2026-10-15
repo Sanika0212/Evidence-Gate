@@ -61,6 +61,9 @@ def serve(args: argparse.Namespace, settings: Settings) -> None:
 
             instrument_clients()
             app = create_app(settings)
+            started = time.perf_counter()
+            app.state.warm_up()
+            log.info("gateway_ready", warmup_s=round(time.perf_counter() - started, 2))
             try:
                 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
