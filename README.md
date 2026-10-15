@@ -46,8 +46,9 @@ Evidence Gate turns the threshold into a promise you can check:
 
 ## Results
 
-Every number below comes from a script in `eval/` or `loadtest/` and a results file in
-`runs/`; `make eval` and `make figures` rebuild them.
+Every result below comes from a script in `eval/`, `loadtest/` or `scripts/` and its file
+in `runs/` (the per-pod CPU readings in the load section were read from Prometheus during
+the last load level); `make eval` and `make figures` rebuild them.
 
 ### Does it catch unsupported claims?
 

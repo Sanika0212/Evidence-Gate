@@ -58,6 +58,8 @@ eval:               ## every benchmark in the README
 	$(PY) eval/run_guarantee.py
 	$(PY) eval/run_shift.py
 	$(PY) eval/run_retrieval.py --n 500
+	$(PY) eval/run_pii.py
+	$(PY) eval/run_speed.py
 
 figures:
 	$(PY) scripts/make_figures.py
